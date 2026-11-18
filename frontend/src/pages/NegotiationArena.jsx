@@ -723,12 +723,12 @@ const NegotiationArena = () => {
           const fallbackId =
             a.id ||
             (currentScenarioId === 'job-offer'
-              ? (idx === 0 ? 'job-candidate' : 'hiring-director')
+              ? (idx === 0 ? 'hiring-director' : 'job-candidate')
               : currentScenarioId === 'project-budget'
               ? (idx === 0 ? 'vp-engineering' : idx === 1 ? 'cmo-marketing' : 'head-product-ai')
               : (idx === 0 ? 'buyer-procurement' : 'vendor-sales'));
           const personality =
-            effectivePersonalities?.[a.id] ||
+            (a.id ? effectivePersonalities?.[a.id] : null) ||
             effectivePersonalities?.[fallbackId] ||
             (isPracticeMode && a.id === location.state?.userRoleAgentId ? 'Human' : null) ||
             a.personality ||
@@ -974,12 +974,12 @@ const NegotiationArena = () => {
         const fallbackId =
           a.id ||
           (currentScenarioId === 'job-offer'
-            ? (idx === 0 ? 'job-candidate' : 'hiring-director')
+            ? (idx === 0 ? 'hiring-director' : 'job-candidate')
             : currentScenarioId === 'project-budget'
             ? (idx === 0 ? 'vp-engineering' : idx === 1 ? 'cmo-marketing' : 'head-product-ai')
             : (idx === 0 ? 'buyer-procurement' : 'vendor-sales'));
         const personality =
-          effectivePersonalities?.[a.id] ||
+          (a.id ? effectivePersonalities?.[a.id] : null) ||
           effectivePersonalities?.[fallbackId] ||
           (isPracticeMode && a.id === location.state?.userRoleAgentId ? 'Human' : null) ||
           a.personality ||
@@ -1087,14 +1087,14 @@ const NegotiationArena = () => {
       metaAgent.id ||
       simAgent.id ||
       (currentScenarioId === 'job-offer'
-        ? (idx === 0 ? 'job-candidate' : 'hiring-director')
+        ? (idx === 0 ? 'hiring-director' : 'job-candidate')
         : currentScenarioId === 'project-budget'
         ? (idx === 0 ? 'vp-engineering' : idx === 1 ? 'cmo-marketing' : 'head-product-ai')
         : (idx === 0 ? 'buyer-procurement' : 'vendor-sales'));
 
     const configuredPersonality =
-      effectivePersonalities?.[agentId] ||
-      effectivePersonalities?.[metaAgent.id] ||
+      (agentId ? effectivePersonalities?.[agentId] : null) ||
+      (metaAgent.id ? effectivePersonalities?.[metaAgent.id] : null) ||
       metaAgent.personality ||
       simAgent.personality ||
       metaAgent.defaultPersonality ||
