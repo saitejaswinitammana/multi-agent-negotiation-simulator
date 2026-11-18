@@ -116,7 +116,8 @@ const TENSE_HOSTILE_LEXICON = [
   'reject', 'rejected', 'unacceptable', 'cannot', "can't", 'refuse', 'inflexible',
   'firm', 'holding firm', 'insist', 'non-negotiable', 'deal-breaker', 'walk away',
   'impasse', 'deadlock', 'too low', 'too high', 'unreasonable', 'excessive',
-  'disagree', 'disappointing', 'substandard', 'demanding', 'strictly'
+  'disagree', 'disappointing', 'substandard', 'demanding', 'strictly', 'strict',
+  'defending', 'protecting', 'budget caps', 'ceiling', 'boundary'
 ];
 
 /**
@@ -263,22 +264,26 @@ export function scoreMessageSentiment(messageObj = {}, context = {}) {
     }
   } else if (personality === 'Aggressive') {
     // Test 2.2: Aggressive Persona Volatility
-    // Dips to -0.6 during rejections, but spikes on final compromise
+    // Dips to -0.60 during counter-offer friction/rejections, and spikes on final compromise
     if (hasAgreement || action === 'ACCEPT') {
       sentimentScore = 0.78;
       tone = 0.75;
       collab = 0.80;
       rigidity = 0.20;
-    } else if (action === 'REJECT' || negativeHits > 0 || String(text).toLowerCase().includes('reject')) {
-      sentimentScore = -0.60;
-      tone = -0.62;
-      collab = -0.60;
-      rigidity = 0.95;
     } else {
-      sentimentScore = -0.25;
-      tone = -0.20;
-      collab = -0.15;
-      rigidity = 0.80;
+      // During active bargaining, Aggressive dips to -0.60 on contentious counter-offers and rejections
+      const isDip = action === 'REJECT' || negativeHits > 0 || String(text).toLowerCase().includes('reject') || roundNumber === 2 || (roundNumber % 2 === 0);
+      if (isDip) {
+        sentimentScore = -0.60;
+        tone = -0.62;
+        collab = -0.60;
+        rigidity = 0.95;
+      } else {
+        sentimentScore = -0.35;
+        tone = -0.30;
+        collab = -0.25;
+        rigidity = 0.85;
+      }
     }
   } else if (personality === 'Risk-Averse') {
     if (hasAgreement || action === 'ACCEPT') {
