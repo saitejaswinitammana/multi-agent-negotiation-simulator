@@ -32,6 +32,7 @@ import {
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { listSimulations, getSimulationState } from '../services/simulationApi';
+import SentimentJourneyTimeline from '../components/SentimentJourneyTimeline';
 import './HistoryReports.css';
 
 // Official supported scenarios
@@ -864,6 +865,13 @@ export default function HistoryReports() {
                   </svg>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Sentiment Journey Timeline & Emotional Trajectory Visualizer (Member 2 Feature) */}
+          {selectedSim.messages && selectedSim.messages.length > 0 && (
+            <div className="report-sentiment-section">
+              <SentimentJourneyTimeline simulation={selectedSim} />
             </div>
           )}
 
