@@ -41,10 +41,15 @@ const OFFICIAL_SCENARIO_IDS = ['vendor-pricing', 'job-offer', 'project-budget'];
 
 // Helper to determine simulation mode from metadata
 function getSimulationModeLabel(sim) {
-  if (sim.simulation_mode) return sim.simulation_mode;
-  if (sim.mode) return sim.mode;
+  if (!sim) return 'Agent vs Agent (Autonomous)';
+  const rawMode = `${sim.simulation_mode || ''} ${sim.mode || ''}`.toLowerCase();
   const agents = sim.agents || [];
-  if (agents.some(a => a.name?.toLowerCase().includes('human') || a.role?.toLowerCase().includes('human') || a.is_human)) {
+  const isPractice =
+    rawMode.includes('practice') ||
+    sim.is_practice === true ||
+    (sim.id && String(sim.id).includes('practice')) ||
+    agents.some(a => a.name?.toLowerCase().includes('human') || a.role?.toLowerCase().includes('human') || a.is_human || a.personality === 'Human');
+  if (isPractice) {
     return 'Human vs Agent (Practice Mode)';
   }
   return 'Agent vs Agent (Autonomous)';
@@ -194,17 +199,7 @@ export default function HistoryReports() {
         });
 
         // Filter strictly to the 3 official scenarios: vendor-pricing, job-offer, project-budget
-        // Exclude practice mode sessions from Negotiation History (Simulation Mode only)
         const officialSims = userSims.filter(s => {
-          const isPractice =
-            s.mode === 'practice' ||
-            s.is_practice === true ||
-            (s.id && s.id.includes('practice')) ||
-            (Array.isArray(s.agents) && s.agents.some((a) => a.personality === 'Human' || a.is_human === true));
-          if (isPractice) {
-            return false;
-          }
-
           const sid = (s.scenario_id || '').toLowerCase();
           const title = (s.scenario_title || '').toLowerCase();
 
