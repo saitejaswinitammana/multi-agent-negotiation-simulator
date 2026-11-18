@@ -723,7 +723,7 @@ const NegotiationArena = () => {
           const fallbackId =
             a.id ||
             (currentScenarioId === 'job-offer'
-              ? (idx === 0 ? 'hiring-director' : 'job-candidate')
+              ? (idx === 0 ? 'job-candidate' : 'hiring-director')
               : currentScenarioId === 'project-budget'
               ? (idx === 0 ? 'vp-engineering' : idx === 1 ? 'cmo-marketing' : 'head-product-ai')
               : (idx === 0 ? 'buyer-procurement' : 'vendor-sales'));
@@ -735,7 +735,7 @@ const NegotiationArena = () => {
             a.defaultPersonality ||
             'Collaborative';
           return {
-            id: fallbackId,
+            id: a.id || fallbackId,
             role: a.role || a.name,
             name: a.name,
             goal: a.primaryGoal || a.goal,
@@ -974,7 +974,7 @@ const NegotiationArena = () => {
         const fallbackId =
           a.id ||
           (currentScenarioId === 'job-offer'
-            ? (idx === 0 ? 'hiring-director' : 'job-candidate')
+            ? (idx === 0 ? 'job-candidate' : 'hiring-director')
             : currentScenarioId === 'project-budget'
             ? (idx === 0 ? 'vp-engineering' : idx === 1 ? 'cmo-marketing' : 'head-product-ai')
             : (idx === 0 ? 'buyer-procurement' : 'vendor-sales'));
@@ -986,7 +986,7 @@ const NegotiationArena = () => {
           a.defaultPersonality ||
           'Collaborative';
         return {
-          id: fallbackId,
+          id: a.id || fallbackId,
           role: a.role || a.name,
           name: a.name,
           goal: a.primaryGoal || a.goal,
@@ -1087,7 +1087,7 @@ const NegotiationArena = () => {
       metaAgent.id ||
       simAgent.id ||
       (currentScenarioId === 'job-offer'
-        ? (idx === 0 ? 'hiring-director' : 'job-candidate')
+        ? (idx === 0 ? 'job-candidate' : 'hiring-director')
         : currentScenarioId === 'project-budget'
         ? (idx === 0 ? 'vp-engineering' : idx === 1 ? 'cmo-marketing' : 'head-product-ai')
         : (idx === 0 ? 'buyer-procurement' : 'vendor-sales'));

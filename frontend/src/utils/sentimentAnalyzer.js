@@ -189,7 +189,16 @@ export function scoreMessageSentiment(messageObj = {}, context = {}) {
   const senderType = (messageObj.sender_type || 'AGENT').toUpperCase();
   const isHuman = senderType === 'HUMAN';
   const role = messageObj.sender_role || messageObj.sender_name || 'Agent';
-  const rawPersonality = messageObj.personality || (isHuman ? 'Human' : 'Collaborative');
+  const rawCandidate = context.personality || messageObj.personality || (isHuman ? 'Human' : 'Collaborative');
+  let rawPersonality = rawCandidate;
+  if (typeof rawCandidate === 'string') {
+    const trimmed = rawCandidate.trim();
+    if (trimmed.toLowerCase() === 'collaborative') rawPersonality = 'Collaborative';
+    else if (trimmed.toLowerCase() === 'aggressive') rawPersonality = 'Aggressive';
+    else if (trimmed.toLowerCase().includes('risk')) rawPersonality = 'Risk-Averse';
+    else if (trimmed.toLowerCase() === 'analytical') rawPersonality = 'Analytical';
+    else if (trimmed.toLowerCase() === 'human') rawPersonality = 'Human';
+  }
   const personality = ARCHETYPE_BASELINES[rawPersonality] ? rawPersonality : 'Collaborative';
   const baseline = ARCHETYPE_BASELINES[personality] || ARCHETYPE_BASELINES.Collaborative;
 
@@ -427,9 +436,20 @@ export function analyzeTrajectory(messages = [], options = {}) {
     const roundMsgs = negotiatorMessages.filter((m) => Number(m.round_number) === r);
 
     agentCurves.forEach((curve) => {
+      const isRoleMatch = (r1, r2) => {
+        if (!r1 || !r2) return false;
+        const a = String(r1).toLowerCase().trim();
+        const b = String(r2).toLowerCase().trim();
+        return a === b || a.includes(b) || b.includes(a);
+      };
+
       const msg = roundMsgs.find(
-        (m) => (m.sender_role === curve.role || m.sender_name === curve.name) ||
-               (curve.isHuman && m.sender_type === 'HUMAN')
+        (m) =>
+          isRoleMatch(m.sender_role, curve.role) ||
+          isRoleMatch(m.sender_name, curve.name) ||
+          isRoleMatch(m.sender_role, curve.name) ||
+          isRoleMatch(m.sender_name, curve.role) ||
+          (curve.isHuman && m.sender_type === 'HUMAN')
       );
 
       let concessionDelta = 0;
@@ -454,6 +474,7 @@ export function analyzeTrajectory(messages = [], options = {}) {
           hasAgreement: hasGlobalAgreement && (isFinal || msg.action === 'ACCEPT'),
           prevScore: prevPoint?.score ?? null,
           concessionDelta,
+          personality: curve.personality,
         });
       } else {
         if (prevPoint) {
