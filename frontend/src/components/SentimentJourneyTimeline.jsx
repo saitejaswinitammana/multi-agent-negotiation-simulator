@@ -53,7 +53,7 @@ export default function SentimentJourneyTimeline({
     });
   }, [simulation, practiceUserRole]);
 
-  if (!trajectory || trajectory.agentCurves.length === 0) {
+  if (!trajectory || !simulation.messages || simulation.messages.length === 0 || trajectory.agentCurves.length === 0) {
     return (
       <div className={`sentiment-timeline-empty ${className}`}>
         <Activity size={24} className="empty-icon" />
@@ -550,3 +550,4 @@ export default function SentimentJourneyTimeline({
     </div>
   );
 }
+
