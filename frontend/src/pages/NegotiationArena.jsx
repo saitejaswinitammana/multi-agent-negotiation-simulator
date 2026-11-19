@@ -40,6 +40,7 @@ import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { getScenarioById, SCENARIOS } from '../data/scenarios';
 import AgentFaceAvatar from '../components/AgentFaceAvatar';
+import SentimentJourneyTimeline from '../components/SentimentJourneyTimeline';
 import {
   startSimulation,
   getSimulationState,
@@ -728,14 +729,14 @@ const NegotiationArena = () => {
               ? (idx === 0 ? 'vp-engineering' : idx === 1 ? 'cmo-marketing' : 'head-product-ai')
               : (idx === 0 ? 'buyer-procurement' : 'vendor-sales'));
           const personality =
-            effectivePersonalities?.[a.id] ||
+            (a.id ? effectivePersonalities?.[a.id] : null) ||
             effectivePersonalities?.[fallbackId] ||
             (isPracticeMode && a.id === location.state?.userRoleAgentId ? 'Human' : null) ||
             a.personality ||
             a.defaultPersonality ||
             'Collaborative';
           return {
-            id: fallbackId,
+            id: a.id || fallbackId,
             role: a.role || a.name,
             name: a.name,
             goal: a.primaryGoal || a.goal,
@@ -947,10 +948,6 @@ const NegotiationArena = () => {
 
   // Direct navigation to negotiation report (includes ?from=arena so report page has a "Back to Negotiation Arena" button)
   const handleViewReport = () => {
-    if (isPracticeMode) {
-      setShowPracticeReportModal(true);
-      return;
-    }
     allowExitRef.current = true;
     if (simulation?.id) {
       sessionStorage.setItem('viewing_report_sim_id', simulation.id);
@@ -979,14 +976,14 @@ const NegotiationArena = () => {
             ? (idx === 0 ? 'vp-engineering' : idx === 1 ? 'cmo-marketing' : 'head-product-ai')
             : (idx === 0 ? 'buyer-procurement' : 'vendor-sales'));
         const personality =
-          effectivePersonalities?.[a.id] ||
+          (a.id ? effectivePersonalities?.[a.id] : null) ||
           effectivePersonalities?.[fallbackId] ||
           (isPracticeMode && a.id === location.state?.userRoleAgentId ? 'Human' : null) ||
           a.personality ||
           a.defaultPersonality ||
           'Collaborative';
         return {
-          id: fallbackId,
+          id: a.id || fallbackId,
           role: a.role || a.name,
           name: a.name,
           goal: a.primaryGoal || a.goal,
@@ -1093,8 +1090,8 @@ const NegotiationArena = () => {
         : (idx === 0 ? 'buyer-procurement' : 'vendor-sales'));
 
     const configuredPersonality =
-      effectivePersonalities?.[agentId] ||
-      effectivePersonalities?.[metaAgent.id] ||
+      (agentId ? effectivePersonalities?.[agentId] : null) ||
+      (metaAgent.id ? effectivePersonalities?.[metaAgent.id] : null) ||
       metaAgent.personality ||
       simAgent.personality ||
       metaAgent.defaultPersonality ||
@@ -2668,7 +2665,7 @@ const NegotiationArena = () => {
       {/* Practice Mode Executive Negotiation Report Modal */}
       {showPracticeReportModal && (
         <div className="arena-modal-backdrop" onClick={() => setShowPracticeReportModal(false)}>
-          <div className="arena-modal-card practice-report-dev-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '640px' }}>
+          <div className="arena-modal-card practice-report-dev-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '880px' }}>
             <div className="practice-dev-header">
               <div className="practice-dev-icon-wrap" style={{ background: isDeadlock ? '#fee2e2' : '#dcfce7' }}>
                 {isDeadlock ? <XCircle size={28} style={{ color: '#ef4444' }} /> : <CheckCircle2 size={28} style={{ color: '#16a34a' }} />}
@@ -2760,7 +2757,38 @@ const NegotiationArena = () => {
               <span>🎯 <strong>Tactical Feedback:</strong> {isDeadlock ? 'AI counterpart held a firm stance. Consider proposing concessions earlier or testing a collaborative opening move.' : 'Great job closing the gap! Your concessions effectively matched the counterpart archetype.'}</span>
             </div>
 
+            {/* Sentiment Journey Timeline & Emotional Trajectory Visualizer (Member 2 Feature) */}
+            {simulation?.messages && simulation.messages.length > 0 && (
+              <div style={{ margin: '16px 0' }}>
+                <SentimentJourneyTimeline simulation={simulation} practiceUserRole={location.state?.userRoleAgentId} />
+              </div>
+            )}
+
             <div className="practice-dev-actions">
+              <button
+                type="button"
+                className="btn-practice-dev-report"
+                style={{
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  fontWeight: 600,
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+                onClick={() => {
+                  allowExitRef.current = true;
+                  if (simulation?.id) {
+                    sessionStorage.setItem('viewing_report_sim_id', simulation.id);
+                    navigate(`/history?id=${simulation.id}&from=arena`);
+                  } else {
+                    navigate('/history?from=arena');
+                  }
+                }}
+              >
+                View in History & Reports
+              </button>
               <button
                 type="button"
                 className="btn-practice-dev-scenarios"

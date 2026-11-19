@@ -1,6 +1,17 @@
-const admin = require('firebase-admin');
-const { initializeApp, cert, getApps, applicationDefault } = require('firebase-admin/app');
-const { getAuth } = require('firebase-admin/auth');
+let admin = null;
+let initializeApp = null;
+let cert = null;
+let getApps = null;
+let applicationDefault = null;
+let getAuth = null;
+
+try {
+  admin = require('firebase-admin');
+  ({ initializeApp, cert, getApps, applicationDefault } = require('firebase-admin/app'));
+  ({ getAuth } = require('firebase-admin/auth'));
+} catch (e) {
+  // firebase-admin not installed; graceful fallback
+}
 
 /**
  * Firebase Admin SDK Configuration
