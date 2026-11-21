@@ -11,6 +11,9 @@
  */
 
 const { db } = require('../db/db');
+const {
+  calculateResolutionScore,
+} = require('./resolutionScoringService');
 const { getAgentNegotiationMove } = require('./aiClient');
 
 // Canonical Scenario Presets
@@ -1940,7 +1943,21 @@ const fixedOffer =
       currentRound: sim.current_round,
       maxRounds: sim.max_rounds,
       isRoundEnd,
-      settlementPrice: move.offer_value || (currentGap <= threshold ? Math.round((agent0Offer + agent1Offer) / 2) : (agent1Offer || agent0Offer)),
+      settlementPrice:
+  move.offer_value ??
+  (
+    currentGap <= threshold
+      ? Math.round(
+          (
+            Number(agents[0]?.current_offer || 0) +
+            Number(agents[1]?.current_offer || 0)
+          ) / 2
+        )
+      : (
+          Number(agents[1]?.current_offer || 0) ||
+          Number(agents[0]?.current_offer || 0)
+        )
+  ),
       activeAgent,
       bothHaveOffered,
       allHaveOffered,
@@ -2036,11 +2053,22 @@ if (
 
     // 8. Update Simulation Envelope in DB
     await db.updateSimulation(simulationId, {
-      current_round: nextRound,
-      status: newStatus,
-      current_gap: currentGap,
-      agreement_likelihood: likelihood,
-    });
+  current_round: nextRound,
+  status: newStatus,
+  current_gap: currentGap,
+  agreement_likelihood: likelihood,
+});
+
+// Calculate and save the resolution score after the negotiation ends.
+if (['COMPLETED', 'DEADLOCK'].includes(newStatus)) {
+  const completedSimulation = await db.getSimulation(simulationId);
+
+  const scorecard = calculateResolutionScore(completedSimulation);
+
+  await db.updateSimulation(simulationId, {
+    scorecard,
+  });
+}
 
     const finalState = await db.getSimulation(simulationId);
     return {
