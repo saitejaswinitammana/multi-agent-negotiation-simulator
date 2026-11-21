@@ -80,13 +80,16 @@ function calculateConcessionRate(personality, roundNumber, maxRounds, counterpar
   const p = (personality || 'Collaborative').toLowerCase();
   const cp = (counterpartPersonality || 'Collaborative').toLowerCase();
 
+  // Natural random jitter to prevent deterministic round convergence patterns
+  const jitter = (Math.random() - 0.5) * 0.06;
+
   if (p.includes('aggressive')) {
-    const dampener = cp.includes('aggressive') ? 0.7 : 1.0;
-    return dampener * (0.04 * tNorm + 0.35 * Math.pow(tNorm, 3));
+    const dampener = cp.includes('aggressive') ? 0.35 : 0.7;
+    return Math.max(0, Math.min(0.45, dampener * (0.04 * tNorm + 0.30 * Math.pow(tNorm, 3)) + jitter * 0.5));
   } else if (p.includes('risk')) {
-    return Math.min(0.90, 0.25 + 0.65 * Math.pow(tNorm, 0.6));
+    return Math.max(0.05, Math.min(0.85, 0.20 + 0.60 * Math.pow(tNorm, 0.7) + jitter));
   } else {
-    return Math.min(0.75, 0.10 + 0.65 * tNorm);
+    return Math.max(0.05, Math.min(0.80, 0.10 + 0.65 * tNorm + jitter));
   }
 }
 
@@ -98,7 +101,7 @@ function generateDeterministicAgentMove({
   agent,
   counterpart,
   roundNumber,
-  maxRounds = 10,
+  maxRounds = 12,
   currentOffer,
   history,
 }) {
@@ -111,6 +114,16 @@ function generateDeterministicAgentMove({
   const personality = (agent?.personality || 'Collaborative').toLowerCase();
   const cpPersonality = (counterpart?.personality || 'Collaborative').toLowerCase();
   const currency = scenario?.currency || '₹';
+
+  const isMyAggressive = personality.includes('aggressive');
+  const isCpAggressive = cpPersonality.includes('aggressive');
+  const isBothAggressive = isMyAggressive && isCpAggressive;
+  const canConcludeAgreement = roundNumber >= 5 && !isBothAggressive;
+
+  // Stochastic acceptance gate ensures agreements do not repeat a fixed round pattern
+  // Enables randomized conclusions across rounds 6, 7, 8, 9, 10, 11, etc.
+  const acceptChance = roundNumber === 5 ? 0.25 : roundNumber === 6 ? 0.45 : roundNumber === 7 ? 0.65 : roundNumber === 8 ? 0.80 : 0.95;
+  const isStochasticallyReady = Math.random() < acceptChance;
 
   const concessionRate = calculateConcessionRate(personality, roundNumber, maxRounds, cpPersonality);
   const hasPriorOffers = Array.isArray(history) && history.some((m) => m.offer_value || m.sender_type === 'AGENT' || m.sender_type === 'HUMAN');
@@ -125,35 +138,106 @@ function generateDeterministicAgentMove({
 
   // Scenario 1: Project Budget Allocation (3-agent multilateral)
   if (scenarioId.includes('budget') || scenarioTitle.includes('budget')) {
-    const engReq = Math.round(450000 - concessionRate * 50000);
-    const mktReq = Math.round(350000 - concessionRate * 30000);
-    const prodReq = 1000000 - (engReq + mktReq);
+    const engConcessionMax = personality.includes('aggressive') ? 12000 : 45000;
+    const mktConcessionMax = personality.includes('aggressive') ? 10000 : 35000;
+    const prodConcessionMax = personality.includes('aggressive') ? 8000 : 35000;
 
-    if (roundNumber >= 8 || (Math.abs(engReq - 400000) <= 5000 && roundNumber >= 6)) {
+    const jitter = Math.floor((Math.random() - 0.5) * 4000);
+    const engReq = Math.round(450000 - concessionRate * engConcessionMax + jitter);
+    const mktReq = Math.round(350000 - concessionRate * mktConcessionMax - jitter);
+    const prodReq = Math.round(300000 - concessionRate * prodConcessionMax);
+    const totalDemanded = engReq + mktReq + prodReq;
+
+    const isEng = agentDescriptor.includes('engineering') || agentDescriptor.includes('infrastructure') || agentDescriptor.includes('department-a') || agentDescriptor.includes('lead software') || agentDescriptor.includes('vp-eng');
+    const isMkt = agentDescriptor.includes('marketing') || agentDescriptor.includes('growth') || agentDescriptor.includes('department-b') || agentDescriptor.includes('cmo');
+
+    // Strict Project Budget rule: Agreement is reached if total budget demands sum to <= 1,000,000, or late round stochastic consensus!
+    const isBudgetWithinCeiling = totalDemanded <= 1000000;
+    if (isBudgetWithinCeiling || (canConcludeAgreement && roundNumber >= 7 && isStochasticallyReady)) {
+      // Balanced consensus allocation summing to exactly 1,000,000
+      const engFinal = 410000;
+      const mktFinal = 325000;
+      const prodFinal = 265000;
+
       action = 'ACCEPT';
       agreementReached = true;
       stance = 'Agreement reached';
+      proposedOffer = isEng ? engFinal : (isMkt ? mktFinal : prodFinal);
+      terms = {
+        engineeringFunding: engFinal,
+        marketingFunding: mktFinal,
+        productAIFunding: prodFinal,
+        engineering: engFinal,
+        marketing: mktFinal,
+        product: prodFinal,
+        total: 1000000,
+      };
       message = pickRandom([
-        `All teams align on the balanced ${currency}1,000,000 budget split: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()}.`,
-        `Consensus finalized. We agree to the tripartite allocation: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()}.`
+        `All three divisions agree to the balanced ${currency}1,000,000 allocation: Engineering ${currency}${engFinal.toLocaleString()}, Marketing ${currency}${mktFinal.toLocaleString()}, Product AI ${currency}${prodFinal.toLocaleString()}.`,
+        `Consensus finalized. We accept the tripartite distribution: Engineering ${currency}${engFinal.toLocaleString()}, Marketing ${currency}${mktFinal.toLocaleString()}, Product AI ${currency}${prodFinal.toLocaleString()}.`
       ]);
+    } else if (roundNumber === 1) {
+      stance = `${agent.personality} opening request`;
+      action = 'OFFER';
+      terms = {
+        engineeringFunding: engReq,
+        marketingFunding: mktReq,
+        productAIFunding: prodReq,
+        engineering: engReq,
+        marketing: mktReq,
+        product: prodReq,
+        totalDemanded,
+      };
+      if (isEng) {
+        proposedOffer = engReq;
+        message = pickRandom([
+          `Engineering proposes tripartite allocation: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()} (Total ${currency}${totalDemanded.toLocaleString()}). Core cloud infrastructure and platform reliability are our priority.`,
+          `Our technical roadmap requires ${currency}${engReq.toLocaleString()} capital. We propose: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()} against our ${currency}1,000,000 ceiling.`
+        ]);
+      } else if (isMkt) {
+        proposedOffer = mktReq;
+        message = pickRandom([
+          `Marketing proposes tripartite allocation: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()} (Total ${currency}${totalDemanded.toLocaleString()}). Securing high-converting acquisition campaigns is vital for revenue.`,
+          `To drive necessary pipeline, Marketing proposes: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()}.`
+        ]);
+      } else {
+        proposedOffer = prodReq;
+        message = pickRandom([
+          `Product AI proposes tripartite allocation: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()} (Total ${currency}${totalDemanded.toLocaleString()}). GenAI model integrations require disciplined trade-offs.`,
+          `Delivering customer-facing GenAI roadmap milestones requires ${currency}${prodReq.toLocaleString()}. We propose: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()}.`
+        ]);
+      }
     } else {
-      stance = `${agent.personality} allocation review`;
-      message = pickRandom([
-        `Proposing balanced budget allocation: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()}.`,
-        `To optimize cross-team ROI, our revised distribution is: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()}.`
-      ]);
-    }
-
-    if (agentDescriptor.includes('engineering') || agentDescriptor.includes('infrastructure') || agentDescriptor.includes('department-a') || agentDescriptor.includes('lead software')) {
-      proposedOffer = engReq;
-      terms = { engineeringFunding: engReq, total: 1000000 };
-    } else if (agentDescriptor.includes('marketing') || agentDescriptor.includes('growth') || agentDescriptor.includes('department-b') || agentDescriptor.includes('cmo')) {
-      proposedOffer = mktReq;
-      terms = { marketingFunding: mktReq, total: 1000000 };
-    } else {
-      proposedOffer = prodReq;
-      terms = { productAIFunding: prodReq, total: 1000000 };
+      stance = `${agent.personality} budget defense`;
+      action = 'COUNTER_OFFER';
+      terms = {
+        engineeringFunding: engReq,
+        marketingFunding: mktReq,
+        productAIFunding: prodReq,
+        engineering: engReq,
+        marketing: mktReq,
+        product: prodReq,
+        totalDemanded,
+      };
+      if (isEng) {
+        proposedOffer = engReq;
+        message = pickRandom([
+          `Engineering can adjust our tripartite distribution to: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()} by phasing secondary tooling while safeguarding database uptime.`,
+          `We revise our proposal to: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()} (Total ${currency}${totalDemanded.toLocaleString()}).`
+        ]);
+      } else if (isMkt) {
+        proposedOffer = mktReq;
+        message = pickRandom([
+          `Marketing refines our tripartite ask to: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()}, concentrating spend on highest-ROI growth channels.`,
+          `To close the budget gap toward ${currency}1,00,000, Marketing proposes: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()}.`
+        ]);
+      } else {
+        proposedOffer = prodReq;
+        message = pickRandom([
+          `Product AI proposes a revised tripartite split: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()} by prioritizing essential Q3 feature deliverables.`,
+          `We can streamline to: Engineering ${currency}${engReq.toLocaleString()}, Marketing ${currency}${mktReq.toLocaleString()}, Product AI ${currency}${prodReq.toLocaleString()} to help bring all three departments within the overall ${currency}1,000,000 pool.`
+        ]);
+      }
     }
   }
   // Scenario 2: Job Offer / Compensation Negotiation (Bilateral)
@@ -168,11 +252,12 @@ function generateDeterministicAgentMove({
       proposedOffer = Math.round(salTarget - concessionRate * (salTarget - salLimit));
 
       if (counterpartOffer !== null && counterpartOffer !== undefined && counterpartOffer > 0) {
-        if (counterpartOffer >= proposedOffer) {
+        // Direct crossover: Recruiter offers more than or equal to candidate proposed ask or target
+        if (counterpartOffer >= proposedOffer || counterpartOffer >= salTarget) {
           action = 'ACCEPT';
           agreementReached = true;
           proposedOffer = counterpartOffer;
-        } else if (counterpartOffer >= salLimit && ((proposedOffer - counterpartOffer) <= 500 || roundNumber >= 8)) {
+        } else if (canConcludeAgreement && counterpartOffer >= salLimit && ((proposedOffer - counterpartOffer) <= 1200) && isStochasticallyReady) {
           action = 'ACCEPT';
           agreementReached = true;
           proposedOffer = counterpartOffer;
@@ -214,11 +299,12 @@ function generateDeterministicAgentMove({
       proposedOffer = Math.round(salTarget + concessionRate * (salLimit - salTarget));
 
       if (counterpartOffer !== null && counterpartOffer !== undefined && counterpartOffer > 0) {
-        if (counterpartOffer <= proposedOffer) {
+        // Direct crossover: Candidate asks less than or equal to recruiter proposed offer or target
+        if (counterpartOffer <= proposedOffer || counterpartOffer <= salTarget) {
           action = 'ACCEPT';
           agreementReached = true;
           proposedOffer = counterpartOffer;
-        } else if (counterpartOffer <= salLimit && ((counterpartOffer - proposedOffer) <= 500 || roundNumber >= 8)) {
+        } else if (canConcludeAgreement && counterpartOffer <= salLimit && ((counterpartOffer - proposedOffer) <= 1200) && isStochasticallyReady) {
           action = 'ACCEPT';
           agreementReached = true;
           proposedOffer = counterpartOffer;
@@ -270,14 +356,12 @@ function generateDeterministicAgentMove({
       proposedOffer = Math.round(priceTarget + concessionRate * (priceLimit - priceTarget));
 
       if (counterpartOffer !== null && counterpartOffer !== undefined && counterpartOffer > 0) {
-        // Condition 1: Seller asks less than or equal to what buyer was offering (e.g. seller asks 70k when buyer offer is 95k)
-        if (counterpartOffer <= proposedOffer) {
+        // Buyer accepts seller offer immediately if seller asks less than or equal to proposed offer or buyer target
+        if (counterpartOffer <= proposedOffer || counterpartOffer <= priceTarget) {
           action = 'ACCEPT';
           agreementReached = true;
           proposedOffer = counterpartOffer;
-        }
-        // Condition 2: Seller asks within buyer ceiling with close gap or in late rounds
-        else if (counterpartOffer <= priceLimit && ((counterpartOffer - proposedOffer) <= 500 || (roundNumber >= 8 && !personality.includes('aggressive')))) {
+        } else if (canConcludeAgreement && (counterpartOffer <= priceLimit && (counterpartOffer - proposedOffer) <= 1200) && isStochasticallyReady) {
           action = 'ACCEPT';
           agreementReached = true;
           proposedOffer = counterpartOffer;
@@ -322,14 +406,12 @@ function generateDeterministicAgentMove({
       proposedOffer = Math.round(priceTarget - concessionRate * (priceTarget - priceLimit));
 
       if (counterpartOffer !== null && counterpartOffer !== undefined && counterpartOffer > 0) {
-        // Condition 1: Buyer offers more than or equal to what seller is asking (e.g. buyer offers 115k when seller ask is 110k)
-        if (counterpartOffer >= proposedOffer) {
+        // Seller accepts buyer offer immediately if buyer offers more than or equal to proposed offer or seller target
+        if (counterpartOffer >= proposedOffer || counterpartOffer >= priceTarget) {
           action = 'ACCEPT';
           agreementReached = true;
           proposedOffer = counterpartOffer;
-        }
-        // Condition 2: Buyer offers above floor with close gap or in late rounds
-        else if (counterpartOffer >= priceLimit && ((proposedOffer - counterpartOffer) <= 500 || (roundNumber >= 8 && !personality.includes('aggressive')))) {
+        } else if (canConcludeAgreement && (counterpartOffer >= priceLimit && (proposedOffer - counterpartOffer) <= 1200) && isStochasticallyReady) {
           action = 'ACCEPT';
           agreementReached = true;
           proposedOffer = counterpartOffer;

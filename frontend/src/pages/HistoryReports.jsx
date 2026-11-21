@@ -32,6 +32,7 @@ import {
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
 import { listSimulations, getSimulationState } from '../services/simulationApi';
+import SentimentJourneyTimeline from '../components/SentimentJourneyTimeline';
 import './HistoryReports.css';
 
 // Official supported scenarios
@@ -40,10 +41,15 @@ const OFFICIAL_SCENARIO_IDS = ['vendor-pricing', 'job-offer', 'project-budget'];
 
 // Helper to determine simulation mode from metadata
 function getSimulationModeLabel(sim) {
-  if (sim.simulation_mode) return sim.simulation_mode;
-  if (sim.mode) return sim.mode;
+  if (!sim) return 'Agent vs Agent (Autonomous)';
+  const rawMode = `${sim.simulation_mode || ''} ${sim.mode || ''}`.toLowerCase();
   const agents = sim.agents || [];
-  if (agents.some(a => a.name?.toLowerCase().includes('human') || a.role?.toLowerCase().includes('human') || a.is_human)) {
+  const isPractice =
+    rawMode.includes('practice') ||
+    sim.is_practice === true ||
+    (sim.id && String(sim.id).includes('practice')) ||
+    agents.some(a => a.name?.toLowerCase().includes('human') || a.role?.toLowerCase().includes('human') || a.is_human || a.personality === 'Human');
+  if (isPractice) {
     return 'Human vs Agent (Practice Mode)';
   }
   return 'Agent vs Agent (Autonomous)';
@@ -52,13 +58,30 @@ function getSimulationModeLabel(sim) {
 // Helper to parse vendor and buyer details
 function getParticipants(sim) {
   const agents = sim.agents || [];
-  const vendor = agents.find(a =>
-    a.role?.toLowerCase().includes('vendor') ||
-    a.role?.toLowerCase().includes('seller') ||
-    a.role?.toLowerCase().includes('provider') ||
-    a.role?.toLowerCase().includes('recruiter') ||
-    a.role?.toLowerCase().includes('supplier')
-  ) || agents[1] || {
+  if (agents.length >= 2) {
+    const sid = (sim.scenario_id || '').toLowerCase();
+    if (sid.includes('job')) {
+      const recruiter = agents.find(a => {
+        const k = `${a.id || ''} ${a.role || ''} ${a.name || ''}`.toLowerCase();
+        return k.includes('hiring') || k.includes('recruiter') || k.includes('employer') || k.includes('manager');
+      }) || agents[0];
+      const candidate = agents.find(a => a !== recruiter) || agents[1];
+      return { vendor: recruiter, buyer: candidate };
+    }
+  }
+
+  const vendor = agents.find(a => {
+    const k = `${a.id || ''} ${a.role || ''} ${a.name || ''}`.toLowerCase();
+    return (
+      k.includes('vendor') ||
+      k.includes('seller') ||
+      k.includes('provider') ||
+      k.includes('recruiter') ||
+      k.includes('hiring') ||
+      k.includes('supplier') ||
+      k.includes('marketing')
+    );
+  }) || agents[0] || {
     name: 'Enterprise Vendor Lead',
     role: 'Vendor',
     personality: 'Analytical',
@@ -66,13 +89,18 @@ function getParticipants(sim) {
     stance: 'Active Participant',
   };
 
-  const buyer = agents.find(a =>
-    a.role?.toLowerCase().includes('buyer') ||
-    a.role?.toLowerCase().includes('client') ||
-    a.role?.toLowerCase().includes('candidate') ||
-    a.role?.toLowerCase().includes('human') ||
-    a.role?.toLowerCase().includes('procurement')
-  ) || agents[0] || {
+  const buyer = agents.find(a => {
+    if (a === vendor) return false;
+    const k = `${a.id || ''} ${a.role || ''} ${a.name || ''}`.toLowerCase();
+    return (
+      k.includes('buyer') ||
+      k.includes('client') ||
+      k.includes('candidate') ||
+      k.includes('human') ||
+      k.includes('procurement') ||
+      k.includes('engineering')
+    );
+  }) || agents.find(a => a !== vendor) || agents[1] || {
     name: 'Procurement Specialist',
     role: 'Buyer',
     personality: 'Collaborative',
@@ -171,17 +199,7 @@ export default function HistoryReports() {
         });
 
         // Filter strictly to the 3 official scenarios: vendor-pricing, job-offer, project-budget
-        // Exclude practice mode sessions from Negotiation History (Simulation Mode only)
         const officialSims = userSims.filter(s => {
-          const isPractice =
-            s.mode === 'practice' ||
-            s.is_practice === true ||
-            (s.id && s.id.includes('practice')) ||
-            (Array.isArray(s.agents) && s.agents.some((a) => a.personality === 'Human' || a.is_human === true));
-          if (isPractice) {
-            return false;
-          }
-
           const sid = (s.scenario_id || '').toLowerCase();
           const title = (s.scenario_title || '').toLowerCase();
 
@@ -876,6 +894,13 @@ export default function HistoryReports() {
                   </svg>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Sentiment Journey Timeline & Emotional Trajectory Visualizer (Member 2 Feature) */}
+          {selectedSim.messages && selectedSim.messages.length > 0 && (
+            <div className="report-sentiment-section">
+              <SentimentJourneyTimeline simulation={selectedSim} />
             </div>
           )}
 
