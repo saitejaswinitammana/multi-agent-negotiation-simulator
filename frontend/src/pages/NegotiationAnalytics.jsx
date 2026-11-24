@@ -26,6 +26,8 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { listSimulations } from '../services/simulationApi';
+import { AnalyticsPanels } from '../components/AnalyticsPanels';
+import { personalityWinRates } from '../utils/analyticsMetrics';
 import './NegotiationAnalytics.css';
 
 // Helper to determine if a simulation was left in between or ended early (identical to HistoryReports)
@@ -176,7 +178,7 @@ export default function NegotiationAnalytics() {
   const [analyticsMode, setAnalyticsMode] = useState('SIMULATION');
 
   const [simulations, setSimulations] = useState([]);
-  const [practiceSessions, setPracticeSessions] = useState(() => getStoredPracticeSessions());
+  const [practiceSessions, setPracticeSessions] = useState(() => getStoredPracticeSessions().filter((s) => !String(s.id || '').startsWith('practice-seed')));
   const [loading, setLoading] = useState(true);
   const [hoveredMonth, setHoveredMonth] = useState(null);
 
@@ -201,7 +203,7 @@ export default function NegotiationAnalytics() {
   const reloadPracticeSessions = () => {
     setLoading(true);
     setTimeout(() => {
-      setPracticeSessions(getStoredPracticeSessions());
+      setPracticeSessions(getStoredPracticeSessions().filter((s) => !String(s.id || '').startsWith('practice-seed')));
       setLoading(false);
     }, 350);
   };
@@ -209,7 +211,7 @@ export default function NegotiationAnalytics() {
   const handleRefreshTelemetry = async () => {
     setLoading(true);
     try {
-      setPracticeSessions(getStoredPracticeSessions());
+      setPracticeSessions(getStoredPracticeSessions().filter((s) => !String(s.id || '').startsWith('practice-seed')));
       await fetchSimulations();
     } catch (e) {
       console.warn('Telemetry refresh error:', e);
@@ -292,7 +294,7 @@ export default function NegotiationAnalytics() {
 
         setSimulations(officialSims);
         if (officialPracticeSims.length > 0) {
-          setPracticeSessions(officialPracticeSims);
+                    setPracticeSessions(officialPracticeSims.filter((s) => s.status !== 'RUNNING' && s.status !== 'CREATED'));
         }
       } else {
         setSimulations([]);
@@ -323,7 +325,10 @@ export default function NegotiationAnalytics() {
     yearsSet.add(2026);
     return Array.from(yearsSet).sort((a, b) => b - a);
   }, [simulations, currentSystemYear]);
-
+  const winRateRows = useMemo(
+    () => personalityWinRates(analyticsMode === 'SIMULATION' ? simulations : practiceSessions),
+    [analyticsMode, simulations, practiceSessions]
+  );
   // ============================================================================
   // Simulation Mode Statistics
   // ============================================================================
@@ -559,7 +564,7 @@ export default function NegotiationAnalytics() {
       return { month: m, score, count: mStats.total };
     });
 
-    const totalPracticeMinutes = Math.max(total * 4, 18);
+    const totalPracticeMinutes = total*4;
 
     return {
       total,
@@ -1350,22 +1355,7 @@ export default function NegotiationAnalytics() {
               </div>
 
               <div className="agent-perf-list">
-                {(analyticsMode === 'SIMULATION'
-                  ? [
-                      { name: 'Collaborative Archetype', rate: Math.min(95, stats.agreementRate + 15) },
-                      { name: 'Analytical Strategist', rate: Math.min(90, stats.agreementRate + 5) },
-                      { name: 'Pragmatic Conceder', rate: Math.max(50, stats.agreementRate - 5) },
-                      { name: 'Aggressive Anchor', rate: Math.max(40, stats.agreementRate - 12) },
-                      { name: 'Risk-Averse Defensive', rate: Math.max(35, stats.agreementRate - 18) },
-                    ]
-                  : [
-                      { name: 'Collaborative Archetype', rate: 86 },
-                      { name: 'Pragmatic Conceder', rate: 75 },
-                      { name: 'Analytical Strategist', rate: 68 },
-                      { name: 'Risk-Averse Defensive', rate: 58 },
-                      { name: 'Aggressive Anchor', rate: 45 },
-                    ]
-                ).map((agent) => (
+                {winRateRows.map((agent) => (
                   <div key={agent.name} className="agent-perf-row">
                     <div className="agent-perf-meta">
                       <span className="agent-perf-name">{agent.name}</span>
@@ -1391,6 +1381,7 @@ export default function NegotiationAnalytics() {
           {/* ========================================================================
               Row 5: Tertiary 3-Column Chart Grid
               ======================================================================== */}
+              <AnalyticsPanels sessions={analyticsMode === 'SIMULATION' ? simulations : practiceSessions} />
           <div className="analytics-charts-grid">
             {/* Card 7: Outcome Score Distribution (Clamped to prevent overflow) */}
             <div className="analytics-chart-card">
