@@ -5,6 +5,7 @@
 
 const { db } = require('../db/db');
 const { orchestratorService } = require('../services/orchestratorService');
+const { generateTacticalCoaching } = require('../services/tacticalCoachingService');
 
 /**
  * Start or Initialize a Simulation
@@ -52,6 +53,37 @@ async function getSimulationState(req, res) {
     return res.json({ success: true, data: sim });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
+  }
+}
+/**
+ * Generate Tactical Coaching Recommendations
+ * GET /api/simulations/:id/recommendations
+ */
+async function getSimulationRecommendations(req, res) {
+  try {
+    const { id } = req.params;
+    const sim = await db.getSimulation(id);
+
+    if (!sim) {
+      return res.status(404).json({
+        success: false,
+        error: 'Simulation not found',
+      });
+    }
+
+    const recommendations = generateTacticalCoaching(sim);
+
+    return res.json({
+      success: true,
+      data: recommendations,
+    });
+  } catch (err) {
+    console.error('[Simulation Controller] Coaching error:', err);
+
+    return res.status(422).json({
+      success: false,
+      error: err.message,
+    });
   }
 }
 
@@ -229,6 +261,7 @@ async function exportSimulation(req, res) {
 module.exports = {
   startSimulation,
   getSimulationState,
+  getSimulationRecommendations,
   listSimulations,
   advanceSimulationStep,
   runFullSimulation,

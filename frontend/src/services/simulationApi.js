@@ -68,6 +68,27 @@ export async function getSimulationState(simulationId) {
   }
   return null;
 }
+/**
+ * Fetch Tactical Coaching Recommendations
+ */
+export async function getTacticalRecommendations(simulationId) {
+  try {
+    const res = await fetch(
+      `${BACKEND_URL}/api/simulations/${encodeURIComponent(simulationId)}/recommendations`
+    );
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      throw new Error(json.error || `Server returned ${res.status}`);
+    }
+
+    return json.data;
+  } catch (err) {
+    console.warn('[Simulation API] Failed to fetch coaching:', err.message);
+    return null;
+  }
+}
 
 export async function stepSimulation(simulationId, customMove = null) {
   try {

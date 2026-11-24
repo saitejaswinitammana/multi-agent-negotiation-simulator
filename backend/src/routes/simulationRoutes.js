@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   startSimulation,
   getSimulationState,
+  getSimulationRecommendations,
   listSimulations,
   advanceSimulationStep,
   runFullSimulation,
@@ -16,6 +17,7 @@ const {
 // Routes
 router.post('/start', startSimulation);
 router.get('/', listSimulations);
+router.get('/:id/recommendations', getSimulationRecommendations);
 router.get('/:id', getSimulationState);
 router.get('/:id/export', exportSimulation);
 router.post('/:id/step', advanceSimulationStep);

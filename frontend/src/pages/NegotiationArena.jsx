@@ -44,6 +44,7 @@ import AgentFaceAvatar from '../components/AgentFaceAvatar';
 import {
   startSimulation,
   getSimulationState,
+  getTacticalRecommendations,
   stepSimulation,
   pauseSimulation,
   resumeSimulation,
@@ -279,9 +280,10 @@ const NegotiationArena = () => {
   const [aiCoachEnabled, setAiCoachEnabled] = useState(true);
   const [metricsExpanded, setMetricsExpanded] = useState(false);
   const [practiceMessage, setPracticeMessage] = useState('');
-  const [practiceOfferValue, setPracticeOfferValue] = useState('');
   const [showPracticeReportModal, setShowPracticeReportModal] = useState(false);
-
+  const [coachingData, setCoachingData] = useState(null);
+  const [coachingLoading, setCoachingLoading] = useState(false);
+  const [coachingError, setCoachingError] = useState('');
   // VOICE DICTATION FEATURE: browser-native speech-to-text state.
   const [isListening, setIsListening] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
@@ -399,6 +401,32 @@ const NegotiationArena = () => {
     }
   };
 
+  const handleHumanSubmit = (text) => {
+    handleSendPracticeMessage(text);
+  };
+
+  const speakMessage = (messageId, text) => {
+    if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') {
+      setSpeechStatus('Text-to-speech is not supported in this browser.');
+      return;
+    }
+
+    if (speakingMessageId === messageId) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new window.SpeechSynthesisUtterance(text);
+    utterance.lang = speechLanguage;
+    utterance.rate = 0.95;
+    utterance.onend = () => setSpeakingMessageId(null);
+    utterance.onerror = () => setSpeakingMessageId(null);
+    setSpeakingMessageId(messageId);
+    window.speechSynthesis.speak(utterance);
+  };
+
   // VOICE DICTATION FEATURE: Web Speech API integration.
   // recognition.start() uses the browser's standard microphone permission prompt.
   const startVoiceDictation = () => {
@@ -508,7 +536,6 @@ const NegotiationArena = () => {
       'Dictation stopped. Review, edit, or add to the text before clicking Send.'
     );
   };
-  
 
   const transcriptEndRef = useRef(null);
   const timerRef = useRef(null);
@@ -699,6 +726,9 @@ const NegotiationArena = () => {
   // Always release the browser speech-recognition session when leaving the page.
   useEffect(() => {
     return () => {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
       const recognition = recognitionRef.current;
       if (recognition) {
         recognition.onstart = null;
@@ -766,9 +796,32 @@ const NegotiationArena = () => {
   };
 
   // Direct navigation to negotiation report (includes ?from=arena so report page has a "Back to Negotiation Arena" button)
-  const handleViewReport = () => {
+  const handleViewReport = async () => {
     if (isPracticeMode) {
       setShowPracticeReportModal(true);
+      setCoachingData(null);
+      setCoachingError('');
+      setCoachingLoading(true);
+
+      try {
+        if (!simulation?.id) {
+          throw new Error('Simulation ID is not available.');
+        }
+
+        const recommendations = await getTacticalRecommendations(simulation.id);
+
+        if (!recommendations) {
+          throw new Error('Could not load coaching recommendations.');
+        }
+
+        setCoachingData(recommendations);
+      } catch (err) {
+        console.error('Failed to load tactical coaching:', err);
+        setCoachingError(err.message || 'Unable to load coaching recommendations.');
+      } finally {
+        setCoachingLoading(false);
+      }
+
       return;
     }
     allowExitRef.current = true;
@@ -1899,26 +1952,92 @@ const NegotiationArena = () => {
         </div>
       </div>
 
-      {/* Practice Mode Report Under Development Notice Modal */}
+      {/* Practice Mode Tactical Coaching Report Modal */}
+
+      {/* Practice Mode Tactical Coaching Report Modal */}
       {showPracticeReportModal && (
-        <div className="arena-modal-backdrop" onClick={() => setShowPracticeReportModal(false)}>
-          <div className="arena-modal-card practice-report-dev-modal" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="arena-modal-backdrop"
+          onClick={() => setShowPracticeReportModal(false)}
+        >
+          <div
+            className="arena-modal-card practice-report-dev-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="practice-dev-header">
               <div className="practice-dev-icon-wrap">
                 <Sparkles size={28} className="practice-dev-icon" />
               </div>
-              <span className="practice-dev-badge">Practice Mode Notice</span>
-              <h3 className="practice-dev-title">Practice Negotiation Report</h3>
-              <span className="practice-dev-status-pill">Under Development</span>
+              <span className="practice-dev-badge">Personalized AI Coaching</span>
+              <h3 className="practice-dev-title">
+                Practice Negotiation Report
+              </h3>
             </div>
 
-            <p className="practice-dev-text">
-              The post-negotiation report for <strong>Practice Mode</strong> (including tactical scorecard, concession curve telemetry, and AI coaching assessment) is currently <strong>Under Development</strong> for Milestone 3.
-            </p>
+            {coachingLoading && (
+              <p className="practice-dev-text">
+                Generating your personalized negotiation feedback...
+              </p>
+            )}
 
-            <div className="practice-dev-note">
-              <span>💡 Comprehensive reports and archived transcripts are fully available for <strong>Simulation Mode</strong> under History & Reports.</span>
-            </div>
+            {coachingError && (
+              <div className="practice-dev-note">
+                <strong>Unable to load coaching:</strong> {coachingError}
+              </div>
+            )}
+
+            {coachingData && (
+              <div className="practice-coaching-content">
+                <p className="practice-dev-text">
+                  Your negotiation coaching assessment is ready.
+                </p>
+
+                {coachingData.participants?.map((participant, index) => (
+                  <div
+                    className="practice-coaching-participant"
+                    key={`${participant.name}-${index}`}
+                  >
+                    <h4>{participant.name}</h4>
+                    <p>
+                      <strong>Role:</strong> {participant.role}
+                      {participant.personality && (
+                        <> | <strong>Personality:</strong> {participant.personality}</>
+                      )}
+                    </p>
+
+                    <h5>Strengths</h5>
+                    <ul>
+                      {participant.strengths?.map((item, i) => (
+                        <li key={`strength-${i}`}>{item}</li>
+                      ))}
+                    </ul>
+
+                    <h5>Areas for Improvement</h5>
+                    <ul>
+                      {participant.areas_for_improvement?.map((item, i) => (
+                        <li key={`improvement-${i}`}>{item}</li>
+                      ))}
+                    </ul>
+
+                    <h5>Actionable Takeaways</h5>
+                    <ul>
+                      {participant.actionable_takeaways?.map((item, i) => (
+                        <li key={`takeaway-${i}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+
+                {coachingData.deadlock_recovery && (
+                  <div className="practice-dev-note">
+                    <strong>Deadlock Recovery:</strong>{' '}
+                    {typeof coachingData.deadlock_recovery === 'string'
+                      ? coachingData.deadlock_recovery
+                      : 'Your negotiation demonstrated movement toward resolving a deadlock.'}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="practice-dev-actions">
               <button
@@ -1931,6 +2050,7 @@ const NegotiationArena = () => {
               >
                 Back to Practice Scenarios
               </button>
+
               <button
                 type="button"
                 className="btn-practice-dev-restart"
@@ -1941,6 +2061,7 @@ const NegotiationArena = () => {
               >
                 Restart Session
               </button>
+
               <button
                 type="button"
                 className="btn-practice-dev-close"
@@ -1952,6 +2073,8 @@ const NegotiationArena = () => {
           </div>
         </div>
       )}
+
+
     </div>
   );
 };

@@ -31,7 +31,11 @@ import {
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
-import { listSimulations, getSimulationState } from '../services/simulationApi';
+import {
+  listSimulations,
+  getSimulationState,
+  getTacticalRecommendations,
+} from '../services/simulationApi';
 import './HistoryReports.css';
 
 // Official supported scenarios
@@ -143,6 +147,9 @@ export default function HistoryReports() {
   // Active selected simulation for the detailed report view
   const [selectedSim, setSelectedSim] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [coachingData, setCoachingData] = useState(null);
+  const [coachingLoading, setCoachingLoading] = useState(false);
+  const [coachingError, setCoachingError] = useState('');
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState('');
@@ -272,7 +279,47 @@ export default function HistoryReports() {
 
     loadSingleSim();
   }, [targetId, simulations]);
+    // Load tactical coaching for the selected simulation
+  useEffect(() => {
+    if (!selectedSim?.id) {
+      setCoachingData(null);
+      setCoachingError('');
+      return;
+    }
 
+    let cancelled = false;
+
+    const loadCoaching = async () => {
+      setCoachingLoading(true);
+      setCoachingError('');
+      setCoachingData(null);
+
+      try {
+        const recommendations = await getTacticalRecommendations(selectedSim.id);
+
+        if (!cancelled) {
+          setCoachingData(recommendations);
+          if (!recommendations) {
+            setCoachingError('Coaching recommendations are not available for this session.');
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setCoachingError(err.message || 'Unable to load coaching recommendations.');
+        }
+      } finally {
+        if (!cancelled) {
+          setCoachingLoading(false);
+        }
+      }
+    };
+
+    loadCoaching();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSim?.id]);
   // Handle selecting a simulation to view full report
   const handleSelectSimulation = (sim) => {
     setSearchParams({ id: sim.id });
@@ -536,17 +583,74 @@ export default function HistoryReports() {
             </div>
           </div>
 
-          {/* Practice Mode Notice Banner */}
+          {/* Practice Mode Coaching Notice */}
           {getSimulationModeLabel(selectedSim).includes('Practice') && (
             <div className="practice-mode-dev-notice-banner">
               <Sparkles size={18} className="practice-dev-notice-icon" />
               <div className="practice-dev-notice-text">
-                <strong>Practice Mode Notice:</strong> Detailed tactical coaching evaluations, human scorecard rubrics, and audio telemetry for Practice Mode are currently <strong>Under Development</strong> for Milestone 3. Below is the session audit log.
+                <strong>Personalized Coaching:</strong> This report includes
+                participant-specific strengths, areas for improvement, and
+                actionable recommendations based on the negotiation session.
               </div>
             </div>
+
           )}
 
+          {/* Tactical Coaching Recommendations */}
+          <section className="report-coaching-section">
+            <div className="report-coaching-heading">
+              <Sparkles size={20} />
+              <h2>Personalized Tactical Coaching</h2>
+            </div>
+
+            {coachingLoading && (
+              <p>Loading coaching recommendations...</p>
+            )}
+
+            {coachingError && (
+              <p className="coaching-error">{coachingError}</p>
+            )}
+
+            {!coachingLoading && coachingData?.participants?.map((participant, index) => (
+              <div className="coaching-participant-card" key={`${participant.name}-${index}`}>
+                <div className="coaching-participant-meta">
+                  <h3>{participant.name}</h3>
+                  <span>{participant.role} · {participant.personality}</span>
+                </div>
+
+                <h4>Strengths</h4>
+                <ul>
+                  {(participant.strengths || []).map((item, i) => (
+                    <li key={`strength-${i}`}>{item}</li>
+                  ))}
+                </ul>
+
+                <h4>Areas for Improvement</h4>
+                <ul>
+                  {(participant.areas_for_improvement || []).map((item, i) => (
+                    <li key={`improvement-${i}`}>{item}</li>
+                  ))}
+                </ul>
+
+                <h4>Actionable Recommendations</h4>
+                <ul>
+                  {(participant.actionable_takeaways || []).map((item, i) => (
+                    <li key={`takeaway-${i}`}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+
+            {!coachingLoading && coachingData?.deadlock_recovery && (
+              <div className="coaching-deadlock-notice">
+                <strong>Deadlock Recovery Insight</strong>
+                <p>{coachingData.deadlock_recovery}</p>
+              </div>
+            )}
+          </section>
+
           {/* Report Header Card */}
+
           <div className="report-header-card">
             <div className="report-header-main">
               <div className="report-meta-tags">
