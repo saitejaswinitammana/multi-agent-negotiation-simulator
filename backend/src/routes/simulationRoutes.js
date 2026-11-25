@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { optionalFirebaseToken } = require('../middleware/authMiddleware');
 const {
   startSimulation,
   getSimulationState,
@@ -12,6 +13,7 @@ const {
   endSimulation,
   restartSimulation,
   exportSimulation,
+  handleDeadlockResolutionAction,
 } = require('../controllers/simulationController');
 
 // Routes
