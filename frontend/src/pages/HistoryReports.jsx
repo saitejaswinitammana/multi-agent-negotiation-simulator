@@ -1019,25 +1019,38 @@ function HistoryReportsContent() {
 
               {/* 4 Factor Breakdown */}
               <div className="quality-factors-grid">
-                {(effectiveSummary.resolution_quality.factors || []).map((f, idx) => {
-                  const fillClass = idx === 0 ? 'quality-fill-emerald' : idx === 1 ? 'quality-fill-indigo' : idx === 2 ? 'quality-fill-blue' : 'quality-fill-purple';
-                  return (
-                    <div key={idx} className="quality-factor-card">
-                      <div className="quality-factor-header">
-                        <span className="quality-factor-title">{f.name}</span>
-                        <span className="quality-factor-weight">{f.weight}% Weight</span>
+                {(() => {
+                  const rawFactors = effectiveSummary.resolution_quality.factors;
+                  const factorList = Array.isArray(rawFactors)
+                    ? rawFactors
+                    : Object.entries(rawFactors || {}).map(([key, f]) => ({
+                        name: f.label || f.name || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                        weight: f.weight || 25,
+                        score: f.score || 0,
+                        weighted_score: f.weighted_score ?? Math.round(((f.score || 0) * (f.weight || 25)) / 100),
+                        description: f.description || `Evaluation of ${f.label || key} performance.`,
+                      }));
+
+                  return factorList.map((f, idx) => {
+                    const fillClass = idx === 0 ? 'quality-fill-emerald' : idx === 1 ? 'quality-fill-indigo' : idx === 2 ? 'quality-fill-blue' : 'quality-fill-purple';
+                    return (
+                      <div key={idx} className="quality-factor-card">
+                        <div className="quality-factor-header">
+                          <span className="quality-factor-title">{f.name}</span>
+                          <span className="quality-factor-weight">{f.weight}% Weight</span>
+                        </div>
+                        <div className="quality-factor-score-wrap">
+                          <span className="quality-factor-score">{f.score}/100</span>
+                          <span className="quality-factor-points">+{f.weighted_score} pts</span>
+                        </div>
+                        <div className="quality-progress-track">
+                          <div className={`quality-progress-fill ${fillClass}`} style={{ width: `${Math.min(100, Math.max(0, f.score || 0))}%` }} />
+                        </div>
+                        <p className="quality-factor-desc">{f.description}</p>
                       </div>
-                      <div className="quality-factor-score-wrap">
-                        <span className="quality-factor-score">{f.score}/100</span>
-                        <span className="quality-factor-points">+{f.weighted_score} pts</span>
-                      </div>
-                      <div className="quality-progress-track">
-                        <div className={`quality-progress-fill ${fillClass}`} style={{ width: `${Math.min(100, Math.max(0, f.score || 0))}%` }} />
-                      </div>
-                      <p className="quality-factor-desc">{f.description}</p>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </div>
 
               {/* Scoring Explanation */}
@@ -1054,9 +1067,13 @@ function HistoryReportsContent() {
                     <span>Factors Enhancing Resolution Score</span>
                   </h4>
                   <ul>
-                    {(effectiveSummary.resolution_quality.strengths || []).map((str, sIdx) => (
-                      <li key={sIdx}>{str}</li>
-                    ))}
+                    {(() => {
+                      const raw = effectiveSummary.resolution_quality.strengths;
+                      const list = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
+                      return list.map((str, sIdx) => (
+                        <li key={sIdx}>{String(str)}</li>
+                      ));
+                    })()}
                   </ul>
                 </div>
                 <div className="quality-weaknesses-box">
@@ -1065,9 +1082,13 @@ function HistoryReportsContent() {
                     <span>Factors Limiting Resolution Score</span>
                   </h4>
                   <ul>
-                    {(effectiveSummary.resolution_quality.weaknesses || []).map((w, wIdx) => (
-                      <li key={wIdx}>{w}</li>
-                    ))}
+                    {(() => {
+                      const raw = effectiveSummary.resolution_quality.weaknesses;
+                      const list = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
+                      return list.map((w, wIdx) => (
+                        <li key={wIdx}>{String(w)}</li>
+                      ));
+                    })()}
                   </ul>
                 </div>
               </div>
@@ -1104,25 +1125,29 @@ function HistoryReportsContent() {
 
               {/* Qualitative Dimensions Grid */}
               <div className="critique-dimensions-grid">
-                {(effectiveSummary.strategic_agent_critique.comparative_dimensions || []).map((dim, dIdx) => (
-                  <div key={dIdx} className="critique-dim-card">
-                    <h4 className="critique-dim-title">
-                      <Target size={16} color="#7c3aed" />
-                      <span>{dim.dimension}</span>
-                    </h4>
-                    <div className="critique-dim-evals">
-                      <div className="critique-eval-row">
-                        <strong>Agent 1:</strong> {dim.agent1_eval}
+                {(() => {
+                  const raw = effectiveSummary.strategic_agent_critique.comparative_dimensions;
+                  const list = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
+                  return list.map((dim, dIdx) => (
+                    <div key={dIdx} className="critique-dim-card">
+                      <h4 className="critique-dim-title">
+                        <Target size={16} color="#7c3aed" />
+                        <span>{dim.dimension}</span>
+                      </h4>
+                      <div className="critique-dim-evals">
+                        <div className="critique-eval-row">
+                          <strong>Agent 1:</strong> {dim.agent1_eval}
+                        </div>
+                        <div className="critique-eval-row">
+                          <strong>Agent 2:</strong> {dim.agent2_eval}
+                        </div>
                       </div>
-                      <div className="critique-eval-row">
-                        <strong>Agent 2:</strong> {dim.agent2_eval}
+                      <div className="critique-dim-advantage">
+                        Strategic Advantage: {dim.advantage}
                       </div>
                     </div>
-                    <div className="critique-dim-advantage">
-                      Strategic Advantage: {dim.advantage}
-                    </div>
-                  </div>
-                ))}
+                  ));
+                })()}
               </div>
             </div>
           )}
