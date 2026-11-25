@@ -5,6 +5,7 @@ const {
   startSimulation,
   getSimulationState,
   getSimulationRecommendations,
+  getSimulationSummary,
   listSimulations,
   advanceSimulationStep,
   runFullSimulation,
@@ -20,6 +21,7 @@ const {
 router.post('/start', optionalFirebaseToken, startSimulation);
 router.get('/', optionalFirebaseToken, listSimulations);
 router.get('/:id/recommendations', optionalFirebaseToken, getSimulationRecommendations);
+router.get('/:id/summary', optionalFirebaseToken, getSimulationSummary);
 router.get('/:id', optionalFirebaseToken, getSimulationState);
 router.get('/:id/export', optionalFirebaseToken, exportSimulation);
 router.post('/:id/step', optionalFirebaseToken, advanceSimulationStep);

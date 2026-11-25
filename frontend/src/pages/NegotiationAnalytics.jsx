@@ -90,6 +90,21 @@ function getStoredPracticeSessions() {
       userRole: 'Procurement Buyer',
       opponentRole: 'Enterprise Supplier',
       mode: 'practice',
+      settlement_value: 104000,
+      agents: [
+        { role: 'Procurement Buyer', target_value: 90000, reservation_value: 115000 },
+        { role: 'Enterprise Supplier', target_value: 120000, reservation_value: 95000 },
+      ],
+      offers: [
+        { round_number: 1, agent_role: 'Procurement Buyer', offer_value: 90000 },
+        { round_number: 1, agent_role: 'Enterprise Supplier', offer_value: 120000 },
+        { round_number: 2, agent_role: 'Procurement Buyer', offer_value: 96000 },
+        { round_number: 2, agent_role: 'Enterprise Supplier', offer_value: 115000 },
+        { round_number: 3, agent_role: 'Procurement Buyer', offer_value: 101000 },
+        { round_number: 3, agent_role: 'Enterprise Supplier', offer_value: 109000 },
+        { round_number: 4, agent_role: 'Procurement Buyer', offer_value: 104000 },
+        { round_number: 4, agent_role: 'Enterprise Supplier', offer_value: 104000 },
+      ],
     },
     {
       id: 'practice-seed-2',
@@ -105,6 +120,23 @@ function getStoredPracticeSessions() {
       userRole: 'Procurement Buyer',
       opponentRole: 'Enterprise Supplier',
       mode: 'practice',
+      settlement_value: 105500,
+      agents: [
+        { role: 'Procurement Buyer', target_value: 85000, reservation_value: 115000 },
+        { role: 'Enterprise Supplier', target_value: 125000, reservation_value: 95000 },
+      ],
+      offers: [
+        { round_number: 1, agent_role: 'Procurement Buyer', offer_value: 85000 },
+        { round_number: 1, agent_role: 'Enterprise Supplier', offer_value: 125000 },
+        { round_number: 2, agent_role: 'Procurement Buyer', offer_value: 92000 },
+        { round_number: 2, agent_role: 'Enterprise Supplier', offer_value: 118000 },
+        { round_number: 3, agent_role: 'Procurement Buyer', offer_value: 98000 },
+        { round_number: 3, agent_role: 'Enterprise Supplier', offer_value: 112000 },
+        { round_number: 4, agent_role: 'Procurement Buyer', offer_value: 103000 },
+        { round_number: 4, agent_role: 'Enterprise Supplier', offer_value: 107000 },
+        { round_number: 5, agent_role: 'Procurement Buyer', offer_value: 105500 },
+        { round_number: 5, agent_role: 'Enterprise Supplier', offer_value: 105500 },
+      ],
     },
     {
       id: 'practice-seed-3',
@@ -120,6 +152,19 @@ function getStoredPracticeSessions() {
       userRole: 'Candidate',
       opponentRole: 'Hiring Manager',
       mode: 'practice',
+      settlement_value: 145000,
+      agents: [
+        { role: 'Candidate', target_value: 165000, reservation_value: 125000 },
+        { role: 'Hiring Manager', target_value: 125000, reservation_value: 165000 },
+      ],
+      offers: [
+        { round_number: 1, agent_role: 'Candidate', offer_value: 165000 },
+        { round_number: 1, agent_role: 'Hiring Manager', offer_value: 125000 },
+        { round_number: 2, agent_role: 'Candidate', offer_value: 155000 },
+        { round_number: 2, agent_role: 'Hiring Manager', offer_value: 135000 },
+        { round_number: 3, agent_role: 'Candidate', offer_value: 145000 },
+        { round_number: 3, agent_role: 'Hiring Manager', offer_value: 145000 },
+      ],
     },
     {
       id: 'practice-seed-4',
@@ -135,6 +180,24 @@ function getStoredPracticeSessions() {
       userRole: 'Candidate',
       opponentRole: 'Hiring Manager',
       mode: 'practice',
+      agents: [
+        { role: 'Candidate', target_value: 180000, reservation_value: 140000 },
+        { role: 'Hiring Manager', target_value: 110000, reservation_value: 130000 },
+      ],
+      offers: [
+        { round_number: 1, agent_role: 'Candidate', offer_value: 180000 },
+        { round_number: 1, agent_role: 'Hiring Manager', offer_value: 110000 },
+        { round_number: 2, agent_role: 'Candidate', offer_value: 175000 },
+        { round_number: 2, agent_role: 'Hiring Manager', offer_value: 115000 },
+        { round_number: 3, agent_role: 'Candidate', offer_value: 170000 },
+        { round_number: 3, agent_role: 'Hiring Manager', offer_value: 118000 },
+        { round_number: 4, agent_role: 'Candidate', offer_value: 168000 },
+        { round_number: 4, agent_role: 'Hiring Manager', offer_value: 120000 },
+        { round_number: 5, agent_role: 'Candidate', offer_value: 165000 },
+        { round_number: 5, agent_role: 'Hiring Manager', offer_value: 120000 },
+        { round_number: 6, agent_role: 'Candidate', offer_value: 165000 },
+        { round_number: 6, agent_role: 'Hiring Manager', offer_value: 120000 },
+      ],
     },
     {
       id: 'practice-seed-5',
@@ -150,6 +213,29 @@ function getStoredPracticeSessions() {
       userRole: 'Engineering Lead',
       opponentRole: 'Product Director',
       mode: 'practice',
+      settlement_value: 390000,
+      agents: [
+        { role: 'Engineering Lead', target_value: 450000, reservation_value: 350000 },
+        { role: 'Marketing Lead', target_value: 350000, reservation_value: 250000 },
+        { role: 'Product Director', target_value: 300000, reservation_value: 200000 },
+      ],
+      offers: [
+        { round_number: 1, agent_role: 'Engineering Lead', offer_value: 450000, terms: { engineering: 450000, marketing: 300000, product: 250000 } },
+        { round_number: 1, agent_role: 'Marketing Lead', offer_value: 350000, terms: { engineering: 400000, marketing: 350000, product: 250000 } },
+        { round_number: 1, agent_role: 'Product Director', offer_value: 300000, terms: { engineering: 400000, marketing: 300000, product: 300000 } },
+        { round_number: 2, agent_role: 'Engineering Lead', offer_value: 435000, terms: { engineering: 435000, marketing: 315000, product: 250000 } },
+        { round_number: 2, agent_role: 'Marketing Lead', offer_value: 340000, terms: { engineering: 405000, marketing: 340000, product: 255000 } },
+        { round_number: 2, agent_role: 'Product Director', offer_value: 295000, terms: { engineering: 405000, marketing: 300000, product: 295000 } },
+        { round_number: 3, agent_role: 'Engineering Lead', offer_value: 415000, terms: { engineering: 415000, marketing: 320000, product: 265000 } },
+        { round_number: 3, agent_role: 'Marketing Lead', offer_value: 330000, terms: { engineering: 405000, marketing: 330000, product: 265000 } },
+        { round_number: 3, agent_role: 'Product Director', offer_value: 290000, terms: { engineering: 400000, marketing: 310000, product: 290000 } },
+        { round_number: 4, agent_role: 'Engineering Lead', offer_value: 400000, terms: { engineering: 400000, marketing: 320000, product: 280000 } },
+        { round_number: 4, agent_role: 'Marketing Lead', offer_value: 325000, terms: { engineering: 395000, marketing: 325000, product: 280000 } },
+        { round_number: 4, agent_role: 'Product Director', offer_value: 285000, terms: { engineering: 395000, marketing: 320000, product: 285000 } },
+        { round_number: 5, agent_role: 'Engineering Lead', offer_value: 390000, terms: { engineering: 390000, marketing: 325000, product: 285000 } },
+        { round_number: 5, agent_role: 'Marketing Lead', offer_value: 325000, terms: { engineering: 390000, marketing: 325000, product: 285000 } },
+        { round_number: 5, agent_role: 'Product Director', offer_value: 285000, terms: { engineering: 390000, marketing: 325000, product: 285000 } },
+      ],
     },
     {
       id: 'practice-seed-6',
@@ -165,6 +251,21 @@ function getStoredPracticeSessions() {
       userRole: 'Procurement Buyer',
       opponentRole: 'Enterprise Supplier',
       mode: 'practice',
+      settlement_value: 105000,
+      agents: [
+        { role: 'Procurement Buyer', target_value: 92000, reservation_value: 114000 },
+        { role: 'Enterprise Supplier', target_value: 118000, reservation_value: 96000 },
+      ],
+      offers: [
+        { round_number: 1, agent_role: 'Procurement Buyer', offer_value: 92000 },
+        { round_number: 1, agent_role: 'Enterprise Supplier', offer_value: 118000 },
+        { round_number: 2, agent_role: 'Procurement Buyer', offer_value: 97000 },
+        { round_number: 2, agent_role: 'Enterprise Supplier', offer_value: 113000 },
+        { round_number: 3, agent_role: 'Procurement Buyer', offer_value: 102000 },
+        { round_number: 3, agent_role: 'Enterprise Supplier', offer_value: 108000 },
+        { round_number: 4, agent_role: 'Procurement Buyer', offer_value: 105000 },
+        { round_number: 4, agent_role: 'Enterprise Supplier', offer_value: 105000 },
+      ],
     },
   ];
 }
@@ -178,7 +279,7 @@ export default function NegotiationAnalytics() {
   const [analyticsMode, setAnalyticsMode] = useState('SIMULATION');
 
   const [simulations, setSimulations] = useState([]);
-  const [practiceSessions, setPracticeSessions] = useState(() => getStoredPracticeSessions().filter((s) => !String(s.id || '').startsWith('practice-seed')));
+  const [practiceSessions, setPracticeSessions] = useState(() => getStoredPracticeSessions());
   const [loading, setLoading] = useState(true);
   const [hoveredMonth, setHoveredMonth] = useState(null);
 
@@ -203,7 +304,7 @@ export default function NegotiationAnalytics() {
   const reloadPracticeSessions = () => {
     setLoading(true);
     setTimeout(() => {
-      setPracticeSessions(getStoredPracticeSessions().filter((s) => !String(s.id || '').startsWith('practice-seed')));
+      setPracticeSessions(getStoredPracticeSessions());
       setLoading(false);
     }, 350);
   };
@@ -211,7 +312,7 @@ export default function NegotiationAnalytics() {
   const handleRefreshTelemetry = async () => {
     setLoading(true);
     try {
-      setPracticeSessions(getStoredPracticeSessions().filter((s) => !String(s.id || '').startsWith('practice-seed')));
+      setPracticeSessions(getStoredPracticeSessions());
       await fetchSimulations();
     } catch (e) {
       console.warn('Telemetry refresh error:', e);

@@ -20,6 +20,8 @@ import {
   Search,
   Filter,
   RefreshCw,
+  Target,
+  Award,
   ChevronRight,
   Copy,
   Check,
@@ -35,6 +37,8 @@ import {
   listSimulations,
   getSimulationState,
   getTacticalRecommendations,
+  getSimulationSummary,
+  generateClientFallbackSummary,
 } from '../services/simulationApi';
 import SentimentJourneyTimeline from '../components/SentimentJourneyTimeline';
 import './HistoryReports.css';
@@ -168,6 +172,8 @@ export default function HistoryReports() {
   const [coachingData, setCoachingData] = useState(null);
   const [coachingLoading, setCoachingLoading] = useState(false);
   const [coachingError, setCoachingError] = useState('');
+  const [postSummary, setPostSummary] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState('');
@@ -323,6 +329,45 @@ export default function HistoryReports() {
     };
 
     loadCoaching();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSim?.id]);
+
+  // Load Post-Interaction Executive Summary (Member 1 Feature)
+  useEffect(() => {
+    if (!selectedSim?.id) {
+      setPostSummary(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadSummary = async () => {
+      setSummaryLoading(true);
+      try {
+        if (selectedSim.post_summary) {
+          if (!cancelled) setPostSummary(selectedSim.post_summary);
+          return;
+        }
+
+        const data = await getSimulationSummary(selectedSim.id);
+        if (!cancelled) {
+          setPostSummary(data || generateClientFallbackSummary(selectedSim));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setPostSummary(generateClientFallbackSummary(selectedSim));
+        }
+      } finally {
+        if (!cancelled) {
+          setSummaryLoading(false);
+        }
+      }
+    };
+
+    loadSummary();
 
     return () => {
       cancelled = true;
@@ -593,72 +638,6 @@ export default function HistoryReports() {
             </div>
           </div>
 
-          {/* Practice Mode Coaching Notice */}
-          {getSimulationModeLabel(selectedSim).includes('Practice') && (
-            <div className="practice-mode-dev-notice-banner">
-              <Sparkles size={18} className="practice-dev-notice-icon" />
-              <div className="practice-dev-notice-text">
-                <strong>Personalized Coaching:</strong> This report includes
-                participant-specific strengths, areas for improvement, and
-                actionable recommendations based on the negotiation session.
-              </div>
-            </div>
-
-          )}
-
-          {/* Tactical Coaching Recommendations */}
-          <section className="report-coaching-section">
-            <div className="report-coaching-heading">
-              <Sparkles size={20} />
-              <h2>Personalized Tactical Coaching</h2>
-            </div>
-
-            {coachingLoading && (
-              <p>Loading coaching recommendations...</p>
-            )}
-
-            {coachingError && (
-              <p className="coaching-error">{coachingError}</p>
-            )}
-
-            {!coachingLoading && coachingData?.participants?.map((participant, index) => (
-              <div className="coaching-participant-card" key={`${participant.name}-${index}`}>
-                <div className="coaching-participant-meta">
-                  <h3>{participant.name}</h3>
-                  <span>{participant.role} · {participant.personality}</span>
-                </div>
-
-                <h4>Strengths</h4>
-                <ul>
-                  {(participant.strengths || []).map((item, i) => (
-                    <li key={`strength-${i}`}>{item}</li>
-                  ))}
-                </ul>
-
-                <h4>Areas for Improvement</h4>
-                <ul>
-                  {(participant.areas_for_improvement || []).map((item, i) => (
-                    <li key={`improvement-${i}`}>{item}</li>
-                  ))}
-                </ul>
-
-                <h4>Actionable Recommendations</h4>
-                <ul>
-                  {(participant.actionable_takeaways || []).map((item, i) => (
-                    <li key={`takeaway-${i}`}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-
-            {!coachingLoading && coachingData?.deadlock_recovery && (
-              <div className="coaching-deadlock-notice">
-                <strong>Deadlock Recovery Insight</strong>
-                <p>{coachingData.deadlock_recovery}</p>
-              </div>
-            )}
-          </section>
-
           {/* Report Header Card */}
 
           <div className="report-header-card">
@@ -756,6 +735,106 @@ export default function HistoryReports() {
               </div>
             </div>
           </div>
+
+          {/* Post-Interaction Executive Summary Agent (Milestone 4 - Member 1 Feature) */}
+          {postSummary && (
+            <div className="report-summary-card" style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '16px',
+              padding: '24px',
+              marginBottom: '24px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ background: '#eff6ff', color: '#2563eb', padding: '8px', borderRadius: '10px' }}>
+                    <Sparkles size={20} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>Post-Interaction Executive Summary</h2>
+                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Generated by Autonomous Summary Agent Engine • {postSummary.mode}</span>
+                  </div>
+                </div>
+                <span style={{
+                  background: postSummary.outcome === 'AGREEMENT_REACHED' ? '#dcfce7' : '#fee2e2',
+                  color: postSummary.outcome === 'AGREEMENT_REACHED' ? '#15803d' : '#b91c1c',
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  padding: '4px 10px',
+                  borderRadius: '20px'
+                }}>
+                  {postSummary.outcome}
+                </span>
+              </div>
+
+              {/* Executive Narrative */}
+              <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: '12px', borderLeft: '4px solid #3b82f6', marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', margin: '0 0 6px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Executive Narrative</h3>
+                <p style={{ margin: 0, fontSize: '0.92rem', color: '#334155', lineHeight: '1.6' }}>{postSummary.executive_narrative}</p>
+              </div>
+
+              {/* Opening Bids & Concession Audit Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                {/* Opening Bids */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px' }}>
+                  <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Target size={15} color="#2563eb" />
+                    <span>Opening Anchor Positions</span>
+                  </h4>
+                  {postSummary.opening_bids?.length > 0 ? (
+                    <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.85rem', color: '#334155', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {postSummary.opening_bids.map((b, idx) => (
+                        <li key={idx}>
+                          <strong>{b.agent_name} ({b.agent_role}):</strong> Anchor offer {formatCurrency(b.offer_value, selectedSim.currency)} in Round {b.round_number}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: '#94a3b8' }}>Opening positions recorded at initial turn.</p>
+                  )}
+                </div>
+
+                {/* Practice Insights or Concession Milestones */}
+                {postSummary.practice_insights ? (
+                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px' }}>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Award size={15} color="#8b5cf6" />
+                      <span>Human Bargaining Trajectory</span>
+                    </h4>
+                    <div style={{ fontSize: '0.85rem', color: '#334155', marginBottom: '8px' }}>
+                      <strong>Assessed Style:</strong> <span style={{ color: '#7c3aed', fontWeight: 600 }}>{postSummary.practice_insights.style_assessment}</span>
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.82rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {postSummary.practice_insights.pivotal_decision_points?.map((p, idx) => (
+                        <li key={idx}>
+                          <strong>Round {p.round} ({p.title}):</strong> {p.impact}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px' }}>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <TrendingUp size={15} color="#10b981" />
+                      <span>Key Concession Milestones</span>
+                    </h4>
+                    {postSummary.concession_milestones?.length > 0 ? (
+                      <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.82rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {postSummary.concession_milestones.slice(0, 3).map((m, idx) => (
+                          <li key={idx}>
+                            <strong>Round {m.round} ({m.agent_name}):</strong> {m.direction} by {formatCurrency(m.concession_amount, selectedSim.currency)}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p style={{ margin: 0, fontSize: '0.82rem', color: '#94a3b8' }}>Consistent positioning maintained throughout rounds.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Participants Breakdown: Vendor & Buyer Cards */}
           <div className="report-participants-section">
@@ -1006,6 +1085,254 @@ export default function HistoryReports() {
             <div className="report-sentiment-section">
               <SentimentJourneyTimeline simulation={selectedSim} />
             </div>
+          )}
+
+          {/* Tactical Coaching Recommendations (Member 3 Feature - Strictly Practice Mode Only) */}
+          {Boolean(
+            selectedSim?.simulation_mode === 'PRACTICE' ||
+            selectedSim?.mode === 'practice' ||
+            selectedSim?.mode === 'PRACTICE' ||
+            selectedSim?.is_practice === true ||
+            (selectedSim?.id && String(selectedSim.id).includes('practice')) ||
+            getSimulationModeLabel(selectedSim).toLowerCase().includes('practice') ||
+            (Array.isArray(selectedSim?.agents) && selectedSim.agents.some((a) => a.is_human || a.personality === 'Human' || /human|you/i.test(a.name)))
+          ) && (
+            <section className="report-coaching-section" style={{ marginTop: '2rem', marginBottom: '2rem' }}>
+              <div className="report-coaching-heading">
+                <Sparkles size={20} />
+                <h2>Personalized Tactical Coaching</h2>
+              </div>
+
+              {coachingLoading && (
+                <p>Loading coaching recommendations...</p>
+              )}
+
+              {coachingError && (
+                <p className="coaching-error">{coachingError}</p>
+              )}
+
+              {(() => {
+                if (coachingLoading) return null;
+
+                const allParticipants = coachingData?.participants || [];
+                // In Practice Mode, strictly isolate and display ONLY the human user's selected role
+                const humanMatches = allParticipants.filter((p) =>
+                  p.is_human === true ||
+                  (p.name && /human|you/i.test(p.name)) ||
+                  (p.display_role && p.display_role.includes('(You)')) ||
+                  (p.role && p.role.includes('(You)'))
+                );
+
+                const userRoleStr = (
+                  selectedSim?.user_role ||
+                  selectedSim?.userRole ||
+                  selectedSim?.agents?.find((a) => a.is_human || a.personality === 'Human' || /human|you/i.test(a.name))?.role ||
+                  'Candidate'
+                );
+
+                let displayedParticipant = humanMatches.length > 0 ? humanMatches[0] : null;
+                if (!displayedParticipant && allParticipants.length > 0) {
+                  const roleMatch = allParticipants.find((p) =>
+                    (p.role || '').toLowerCase().includes(userRoleStr.toLowerCase()) ||
+                    (p.name || '').toLowerCase().includes(userRoleStr.toLowerCase())
+                  );
+                  displayedParticipant = roleMatch || allParticipants[0];
+                }
+
+                const rawRole = displayedParticipant?.role || userRoleStr || 'Negotiator';
+                const cleanRole = rawRole.replace(/\s*\((You|Human)\)$/i, '').trim();
+                const cardTitle = `${cleanRole} (You)`;
+                const cardSubtitle = `${cleanRole} · Human Negotiator`;
+
+                // --- DATA-DRIVEN COACHING GENERATOR ---
+                // Extracts real numerical bids, round steps, and terms across all 3 scenarios
+                const scenarioId = String(selectedSim?.scenario_id || selectedSim?.scenarioId || '').toLowerCase();
+                const scenarioTitle = String(selectedSim?.scenario_title || selectedSim?.title || '').toLowerCase();
+                const isVendor = scenarioId.includes('vendor') || scenarioTitle.includes('vendor') || scenarioTitle.includes('pricing');
+                const isJob = scenarioId.includes('job') || scenarioTitle.includes('job') || scenarioTitle.includes('offer');
+
+                const allMsgs = selectedSim?.messages || [];
+                const humanMsgs = allMsgs.filter((m) =>
+                  m.sender_type === 'HUMAN' ||
+                  (m.sender_role && m.sender_role.includes('(You)')) ||
+                  (m.sender_name && /you|human/i.test(m.sender_name))
+                );
+                const aiMsgs = allMsgs.filter((m) => m.sender_type === 'AGENT' && !humanMsgs.includes(m));
+
+                const humanOffers = (humanMsgs.length > 0 ? humanMsgs : allMsgs.filter((m) => (m.sender_role || '').toLowerCase().includes(cleanRole.toLowerCase())))
+                  .map((m) => ({ value: Number(m.offer_value), round: m.round_number || 1, message: m.message || '', terms: m.terms || {} }))
+                  .filter((o) => Number.isFinite(o.value) && o.value > 0);
+
+                const aiOffers = aiMsgs
+                  .map((m) => ({ value: Number(m.offer_value), round: m.round_number || 1, message: m.message || '' }))
+                  .filter((o) => Number.isFinite(o.value) && o.value > 0);
+
+                const firstHuman = humanOffers[0]?.value;
+                const lastHuman = humanOffers[humanOffers.length - 1]?.value;
+                const lastAi = aiOffers[aiOffers.length - 1]?.value;
+                const totalRounds = selectedSim?.current_round || humanOffers.length || 1;
+                const isDeadlock = selectedSim?.status === 'DEADLOCK';
+                const isAgreed = selectedSim?.status === 'AGREEMENT_REACHED' || selectedSim?.status === 'COMPLETED';
+
+                const dataDrivenImprovements = [];
+
+                if (isVendor) {
+                  // Scenario 1: Vendor Pricing Negotiation
+                  const isBuyerRole = /buyer|procurement|client/i.test(cleanRole);
+                  if (isBuyerRole) {
+                    if (firstHuman && firstHuman >= 105000) {
+                      dataDrivenImprovements.push(`Anchor Conservatism: Your initial offer of ₹${firstHuman.toLocaleString()} was only ₹${(115000 - firstHuman).toLocaleString()} below your ₹115,000 ceiling. Anchoring closer to the ₹90,000 target gives you 20% more bargaining headroom.`);
+                    } else if (firstHuman) {
+                      dataDrivenImprovements.push(`Opening Anchor: Opened at ₹${firstHuman.toLocaleString()}. To improve surplus, hold this anchor for at least two rounds before making upward concessions.`);
+                    }
+                    for (let i = 1; i < humanOffers.length; i++) {
+                      const jump = humanOffers[i].value - humanOffers[i - 1].value;
+                      if (jump > 5000) {
+                        dataDrivenImprovements.push(`Rapid Concession: In Round ${humanOffers[i].round}, your offer surged by ₹${jump.toLocaleString()} (${Math.round((jump / humanOffers[i - 1].value) * 100)}%). Concede in smaller increments (e.g. ₹2,000–₹3,000) to avoid signaling budget flexibility.`);
+                        break;
+                      }
+                    }
+                    const hasNet60 = humanMsgs.some((m) => /net-60|payment|warranty|volume|sla/i.test(m.message));
+                    if (!hasNet60) {
+                      dataDrivenImprovements.push(`Single-Dimension Haggling: All ${humanOffers.length || 1} offers focused solely on price. Require Net-60 payment terms or SLA penalty clauses whenever conceding upward on unit price.`);
+                    }
+                  } else {
+                    if (firstHuman && firstHuman <= 108000) {
+                      dataDrivenImprovements.push(`Soft Opening Anchor: Your opening quote of ₹${firstHuman.toLocaleString()} was near your ₹95,000 floor. Quoting at ₹120,000+ signals premium quality and protects seller margin.`);
+                    }
+                    for (let i = 1; i < humanOffers.length; i++) {
+                      const drop = humanOffers[i - 1].value - humanOffers[i].value;
+                      if (drop > 6000) {
+                        dataDrivenImprovements.push(`Rapid Margin Erosion: Dropped price by ₹${drop.toLocaleString()} in Round ${humanOffers[i].round}. Tie every discount to reciprocal buyer commitments such as larger lot sizes.`);
+                        break;
+                      }
+                    }
+                  }
+                  if (isDeadlock && lastHuman && lastAi) {
+                    dataDrivenImprovements.push(`Deadlock Impasse: Negotiation halted with a ₹${Math.abs(lastHuman - lastAi).toLocaleString()} gap between your offer of ₹${lastHuman.toLocaleString()} and counterpart's ₹${lastAi.toLocaleString()}. Propose a compromise split near ₹${Math.round((lastHuman + lastAi) / 2).toLocaleString()} to unlock deadlock.`);
+                  } else if (isAgreed && lastHuman) {
+                    dataDrivenImprovements.push(`Settlement Efficiency: Deal finalized at ₹${lastHuman.toLocaleString()} in Round ${totalRounds}. Countering once more in Round ${Math.max(1, totalRounds - 1)} could have captured ₹3,000–₹5,000 additional surplus.`);
+                  }
+                } else if (isJob) {
+                  // Scenario 2: Job Offer Negotiation
+                  const isCandidateRole = /candidate|applicant/i.test(cleanRole);
+                  if (isCandidateRole) {
+                    if (firstHuman && firstHuman <= 155000) {
+                      dataDrivenImprovements.push(`Under-Anchoring: Your opening ask of ₹${firstHuman.toLocaleString()} was only ₹${(firstHuman - 140000).toLocaleString()} above your ₹140,000 baseline. Tech candidate opening bids should anchor at ₹175,000–₹185,000 to absorb recruiter counter-reductions.`);
+                    } else if (firstHuman) {
+                      dataDrivenImprovements.push(`Anchor Pacing: Established initial salary ask at ₹${firstHuman.toLocaleString()}. Pair this baseline with objective market compensation data.`);
+                    }
+                    for (let i = 1; i < humanOffers.length; i++) {
+                      const drop = humanOffers[i - 1].value - humanOffers[i].value;
+                      if (drop > 8000) {
+                        dataDrivenImprovements.push(`Premature Salary Concession: In Round ${humanOffers[i].round}, your salary ask dropped by ₹${drop.toLocaleString()} (${Math.round((drop / humanOffers[i - 1].value) * 100)}%). Do not lower base salary without asking for equity or sign-on bonus.`);
+                        break;
+                      }
+                    }
+                    const hasEquityOrBonus = humanMsgs.some((m) => /equity|stock|options|bonus|remote|flexib|sign-on|appraisal/i.test(m.message));
+                    if (!hasEquityOrBonus) {
+                      dataDrivenImprovements.push(`Single-Dimension Focus: All ${humanOffers.length || 1} rounds focused exclusively on base salary. When recruiters reach fixed band caps, introduce sign-on bonuses, equity vesting acceleration, or remote days.`);
+                    }
+                  } else {
+                    if (firstHuman && firstHuman >= 155000) {
+                      dataDrivenImprovements.push(`High Recruiter Anchor: Opened at ₹${firstHuman.toLocaleString()}, leaving only ₹${(165000 - firstHuman).toLocaleString()} before reaching your ₹165,000 budget cap.`);
+                    }
+                    dataDrivenImprovements.push('Total Rewards Framing: Frame compensation around total annual value (performance bonus, learning stipend) to navigate candidate base salary resistance.');
+                  }
+                  if (isDeadlock && lastHuman && lastAi) {
+                    dataDrivenImprovements.push(`Compensation Deadlock: Stalled with a ₹${Math.abs(lastHuman - lastAi).toLocaleString()} salary gap between your ask (₹${lastHuman.toLocaleString()}) and recruiter offer (₹${lastAi.toLocaleString()}). Offer a 6-month performance review to break salary impasses.`);
+                  } else if (isAgreed && lastHuman) {
+                    dataDrivenImprovements.push(`Compensation Capture: Concluded contract at ₹${lastHuman.toLocaleString()} in Round ${totalRounds}. Securing performance appraisal timelines in writing protects future trajectory.`);
+                  }
+                } else {
+                  // Scenario 3: Project Budget Allocation
+                  if (firstHuman && firstHuman >= 420000) {
+                    dataDrivenImprovements.push(`High Initial Allocation Request: Opened requesting ₹${firstHuman.toLocaleString()} (${Math.round(firstHuman / 10000)}% of the total ₹1.0M budget). Demanding over 40% without explicit cross-team ROI justification prompts other leads to form defensive coalitions.`);
+                  } else if (firstHuman) {
+                    dataDrivenImprovements.push(`Department Allocation Baseline: Opened requesting ₹${firstHuman.toLocaleString()} for your department. Prepare cross-functional milestones to defend this allocation.`);
+                  }
+                  for (let i = 1; i < humanOffers.length; i++) {
+                    const drop = humanOffers[i - 1].value - humanOffers[i].value;
+                    if (drop > 15000) {
+                      dataDrivenImprovements.push(`Department Concession Pace: Surrendered ₹${drop.toLocaleString()} of your department's allocation in Round ${humanOffers[i].round}. Tie funding concessions directly to deferred project milestones.`);
+                      break;
+                    }
+                  }
+                  const hasSplit = humanMsgs.some((m) => m.terms && (m.terms.marketing || m.terms.product || m.terms.engineering));
+                  if (!hasSplit) {
+                    dataDrivenImprovements.push('Siloed Budget Demands: Your proposals focused exclusively on your own department share. Proposing a complete 3-department split (Engineering, Marketing, Product AI) summing to ₹1,000,000 drives consensus faster.');
+                  }
+                  if (isDeadlock) {
+                    dataDrivenImprovements.push(`Multilateral Deadlock: Cross-department budget stalled with conflicting demands exceeding the ₹1,000,000 organizational cap across ${totalRounds} rounds.`);
+                  } else if (isAgreed && lastHuman) {
+                    dataDrivenImprovements.push(`Budget Consensus: Concluded with ₹${lastHuman.toLocaleString()} allocated to your department (${Math.round(lastHuman / 10000)}% of total fund). Protect critical infrastructure milestones under this approved allocation.`);
+                  }
+                }
+
+                // If backend returned non-generic items, merge with data-driven feedback
+                const apiImprovements = (displayedParticipant?.areas_for_improvement || []).filter(
+                  (item) => !item.toLowerCase().includes('no major issue was detected')
+                );
+                const finalImprovements = dataDrivenImprovements.length > 0 ? dataDrivenImprovements : (apiImprovements.length > 0 ? apiImprovements : [
+                  'Concession Tapering: Make smaller, conditional counteroffers rather than flat concessions.',
+                  'Multi-Issue Packaging: Bundle secondary preferences with primary targets to unlock negotiation surplus.',
+                ]);
+
+                const finalStrengths = (displayedParticipant?.strengths || []).length > 0
+                  ? displayedParticipant.strengths
+                  : [
+                      `Made ${humanOffers.length || 1} measurable proposal${(humanOffers.length || 1) === 1 ? '' : 's'} during the session.`,
+                      `Maintained active negotiation engagement across ${totalRounds} rounds.`,
+                    ];
+
+                const finalTakeaways = (displayedParticipant?.actionable_takeaways || []).length > 0
+                  ? displayedParticipant.actionable_takeaways
+                  : [
+                      'Establish a firm initial anchor 15-20% beyond baseline expectations.',
+                      'Require reciprocal concessions whenever modifying your offer.',
+                      'Bundle multi-issue terms rather than negotiating on a single dimension.',
+                    ];
+
+                return (
+                  <>
+                    <div className="coaching-participant-card">
+                      <div className="coaching-participant-meta">
+                        <h3>{cardTitle}</h3>
+                        <span>{cardSubtitle}</span>
+                      </div>
+
+                      <h4>Strengths</h4>
+                      <ul>
+                        {finalStrengths.map((item, i) => (
+                          <li key={`strength-${i}`}>{item}</li>
+                        ))}
+                      </ul>
+
+                      <h4>Areas for Improvement</h4>
+                      <ul>
+                        {finalImprovements.map((item, i) => (
+                          <li key={`improvement-${i}`}>{item}</li>
+                        ))}
+                      </ul>
+
+                      <h4>Actionable Recommendations</h4>
+                      <ul>
+                        {finalTakeaways.map((item, i) => (
+                          <li key={`takeaway-${i}`}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {!coachingLoading && coachingData?.deadlock_recovery && (
+                      <div className="coaching-deadlock-notice">
+                        <strong>Deadlock Recovery Insight</strong>
+                        <p>{coachingData.deadlock_recovery}</p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </section>
           )}
 
           {/* Turn-by-Turn Negotiation Transcript */}
