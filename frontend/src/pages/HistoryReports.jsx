@@ -391,7 +391,18 @@ export default function HistoryReports() {
   // Derived effective summary (loaded summary or instant client fallback)
   const effectiveSummary = useMemo(() => {
     if (!selectedSim) return null;
-    return postSummary || generateClientFallbackSummary(selectedSim);
+    const fallback = generateClientFallbackSummary(selectedSim) || {};
+    const base = postSummary || selectedSim.post_summary || {};
+    return {
+      ...fallback,
+      ...base,
+      resolution_quality: base.resolution_quality || fallback.resolution_quality || null,
+      strategic_agent_critique: base.strategic_agent_critique || fallback.strategic_agent_critique || null,
+      outcome_analysis: {
+        ...(fallback.outcome_analysis || {}),
+        ...(base.outcome_analysis || {}),
+      },
+    };
   }, [selectedSim, postSummary]);
   // Handle selecting a simulation to view full report
   const handleSelectSimulation = (sim) => {
@@ -961,7 +972,7 @@ export default function HistoryReports() {
 
               {/* 4 Factor Breakdown */}
               <div className="quality-factors-grid">
-                {effectiveSummary.resolution_quality.factors.map((f, idx) => {
+                {(effectiveSummary.resolution_quality.factors || []).map((f, idx) => {
                   const fillClass = idx === 0 ? 'quality-fill-emerald' : idx === 1 ? 'quality-fill-indigo' : idx === 2 ? 'quality-fill-blue' : 'quality-fill-purple';
                   return (
                     <div key={idx} className="quality-factor-card">
@@ -974,7 +985,7 @@ export default function HistoryReports() {
                         <span className="quality-factor-points">+{f.weighted_score} pts</span>
                       </div>
                       <div className="quality-progress-track">
-                        <div className={`quality-progress-fill ${fillClass}`} style={{ width: `${Math.min(100, Math.max(0, f.score))}%` }} />
+                        <div className={`quality-progress-fill ${fillClass}`} style={{ width: `${Math.min(100, Math.max(0, f.score || 0))}%` }} />
                       </div>
                       <p className="quality-factor-desc">{f.description}</p>
                     </div>
@@ -996,7 +1007,7 @@ export default function HistoryReports() {
                     <span>Factors Enhancing Resolution Score</span>
                   </h4>
                   <ul>
-                    {effectiveSummary.resolution_quality.strengths.map((str, sIdx) => (
+                    {(effectiveSummary.resolution_quality.strengths || []).map((str, sIdx) => (
                       <li key={sIdx}>{str}</li>
                     ))}
                   </ul>
@@ -1007,7 +1018,7 @@ export default function HistoryReports() {
                     <span>Factors Limiting Resolution Score</span>
                   </h4>
                   <ul>
-                    {effectiveSummary.resolution_quality.weaknesses.map((w, wIdx) => (
+                    {(effectiveSummary.resolution_quality.weaknesses || []).map((w, wIdx) => (
                       <li key={wIdx}>{w}</li>
                     ))}
                   </ul>
@@ -1046,7 +1057,7 @@ export default function HistoryReports() {
 
               {/* Qualitative Dimensions Grid */}
               <div className="critique-dimensions-grid">
-                {effectiveSummary.strategic_agent_critique.comparative_dimensions.map((dim, dIdx) => (
+                {(effectiveSummary.strategic_agent_critique.comparative_dimensions || []).map((dim, dIdx) => (
                   <div key={dIdx} className="critique-dim-card">
                     <h4 className="critique-dim-title">
                       <Target size={16} color="#7c3aed" />
@@ -1086,13 +1097,13 @@ export default function HistoryReports() {
                 </div>
 
                 <span className={`outcome-pill ${
-                  effectiveSummary.outcome_analysis.outcome_type.includes('Agreement')
+                  String(effectiveSummary.outcome_analysis.outcome_type || '').includes('Agreement')
                     ? 'outcome-pill-success'
-                    : effectiveSummary.outcome_analysis.outcome_type.includes('Failed')
+                    : String(effectiveSummary.outcome_analysis.outcome_type || '').includes('Failed')
                     ? 'outcome-pill-failed'
                     : 'outcome-pill-impasse'
                 }`}>
-                  {effectiveSummary.outcome_analysis.outcome_type}
+                  {effectiveSummary.outcome_analysis.outcome_type || 'Concluded'}
                 </span>
               </div>
 
@@ -1113,20 +1124,20 @@ export default function HistoryReports() {
                 <div className="outcome-metric-card">
                   <span className="outcome-metric-label">Buyer / Client Limits</span>
                   <span className="outcome-metric-val" style={{ fontSize: '1.05rem' }}>
-                    {formatCurrency(effectiveSummary.outcome_analysis.buyer_limits.target, selectedSim.currency)}
+                    {formatCurrency(effectiveSummary.outcome_analysis.buyer_limits?.target ?? effectiveSummary.outcome_analysis.buyer_target ?? getParticipants(selectedSim).buyer?.target_value, selectedSim.currency)}
                   </span>
                   <span className="outcome-metric-sub">
-                    Reservation Limit: {formatCurrency(effectiveSummary.outcome_analysis.buyer_limits.reservation, selectedSim.currency)}
+                    Reservation Limit: {formatCurrency(effectiveSummary.outcome_analysis.buyer_limits?.reservation ?? effectiveSummary.outcome_analysis.buyer_reservation ?? getParticipants(selectedSim).buyer?.reservation_value, selectedSim.currency)}
                   </span>
                 </div>
 
                 <div className="outcome-metric-card">
                   <span className="outcome-metric-label">Seller / Vendor Limits</span>
                   <span className="outcome-metric-val" style={{ fontSize: '1.05rem' }}>
-                    {formatCurrency(effectiveSummary.outcome_analysis.seller_limits.target, selectedSim.currency)}
+                    {formatCurrency(effectiveSummary.outcome_analysis.seller_limits?.target ?? effectiveSummary.outcome_analysis.seller_target ?? getParticipants(selectedSim).vendor?.target_value, selectedSim.currency)}
                   </span>
                   <span className="outcome-metric-sub">
-                    Reservation Floor: {formatCurrency(effectiveSummary.outcome_analysis.seller_limits.reservation, selectedSim.currency)}
+                    Reservation Floor: {formatCurrency(effectiveSummary.outcome_analysis.seller_limits?.reservation ?? effectiveSummary.outcome_analysis.seller_reservation ?? getParticipants(selectedSim).vendor?.reservation_value, selectedSim.currency)}
                   </span>
                 </div>
 
@@ -1135,11 +1146,11 @@ export default function HistoryReports() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
                     {isPracticeMode ? (
                       <>
-                        <span style={{ fontSize: '0.82rem', fontWeight: 600, color: effectiveSummary.outcome_analysis.human_goal_achieved ? '#16a34a' : '#d97706' }}>
-                          Human User: {effectiveSummary.outcome_analysis.human_goal_achieved ? 'Target Achieved ✅' : 'Below Aspiration ⚠️'}
+                        <span style={{ fontSize: '0.82rem', fontWeight: 600, color: (effectiveSummary.outcome_analysis.human_goal_achieved ?? effectiveSummary.outcome_analysis.human_achieved_goal) ? '#16a34a' : '#d97706' }}>
+                          Human User: {(effectiveSummary.outcome_analysis.human_goal_achieved ?? effectiveSummary.outcome_analysis.human_achieved_goal) ? 'Target Achieved ✅' : 'Below Aspiration ⚠️'}
                         </span>
-                        <span style={{ fontSize: '0.82rem', fontWeight: 600, color: effectiveSummary.outcome_analysis.ai_goal_achieved ? '#16a34a' : '#d97706' }}>
-                          AI Opponent: {effectiveSummary.outcome_analysis.ai_goal_achieved ? 'Target Achieved ✅' : 'Conceded ⚠️'}
+                        <span style={{ fontSize: '0.82rem', fontWeight: 600, color: (effectiveSummary.outcome_analysis.ai_goal_achieved ?? effectiveSummary.outcome_analysis.ai_achieved_goal) ? '#16a34a' : '#d97706' }}>
+                          AI Opponent: {(effectiveSummary.outcome_analysis.ai_goal_achieved ?? effectiveSummary.outcome_analysis.ai_achieved_goal) ? 'Target Achieved ✅' : 'Conceded ⚠️'}
                         </span>
                       </>
                     ) : (
@@ -1159,8 +1170,8 @@ export default function HistoryReports() {
               {/* Primary Reason Box */}
               <div className="outcome-reason-box">
                 <h4>Primary Driver of Negotiation Outcome</h4>
-                <p>{effectiveSummary.outcome_analysis.primary_reason}</p>
-                <span>{effectiveSummary.outcome_analysis.details}</span>
+                <p>{effectiveSummary.outcome_analysis.primary_reason || effectiveSummary.outcome_analysis.reason || 'Negotiation concluded.'}</p>
+                <span>{effectiveSummary.outcome_analysis.details || ''}</span>
               </div>
             </div>
           )}

@@ -401,16 +401,35 @@ function calculateOutcomeAnalysis(simulation, isPracticeMode) {
     ? (/seller|candidate/i.test(aiAgent.role) ? finalVal >= Number(aiAgent.reservation_value) : finalVal <= Number(aiAgent.reservation_value))
     : false;
 
+  const buyerTarget = Number(buyer.target_value) || null;
+  const buyerReservation = Number(buyer.reservation_value) || null;
+  const sellerTarget = Number(seller.target_value) || null;
+  const sellerReservation = Number(seller.reservation_value) || null;
+
   return {
     outcome_type: outcomeType,
     final_price: finalVal,
-    buyer_target: Number(buyer.target_value) || null,
-    buyer_reservation: Number(buyer.reservation_value) || null,
-    seller_target: Number(seller.target_value) || null,
-    seller_reservation: Number(seller.reservation_value) || null,
+    buyer_target: buyerTarget,
+    buyer_reservation: buyerReservation,
+    seller_target: sellerTarget,
+    seller_reservation: sellerReservation,
+    buyer_limits: {
+      target: buyerTarget,
+      reservation: buyerReservation,
+    },
+    seller_limits: {
+      target: sellerTarget,
+      reservation: sellerReservation,
+    },
     human_achieved_goal: humanAchieved,
     ai_achieved_goal: aiAchieved,
+    human_goal_achieved: humanAchieved,
+    ai_goal_achieved: aiAchieved,
+    buyer_goal_achieved: isAgreement && buyer ? (finalVal <= (buyerReservation || Infinity)) : false,
+    seller_goal_achieved: isAgreement && seller ? (finalVal >= (sellerReservation || 0)) : false,
     reason,
+    primary_reason: reason,
+    details: isAgreement ? `Settled at contract value of ${finalVal ? '₹' + finalVal.toLocaleString() : 'agreed terms'}.` : 'No agreement finalized.',
   };
 }
 

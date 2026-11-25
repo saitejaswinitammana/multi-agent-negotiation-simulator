@@ -1922,18 +1922,41 @@ export function generateClientFallbackSummary(simulation) {
   const sellerAgent = agents.find((a) => a !== buyerAgent) || agents[1] || {};
   const finalPrice = isAgreement ? Number(agreement?.final_value || 0) : null;
 
+  const buyerTarget = Number(buyerAgent.target_value) || null;
+  const buyerReservation = Number(buyerAgent.reservation_value) || null;
+  const sellerTarget = Number(sellerAgent.target_value) || null;
+  const sellerReservation = Number(sellerAgent.reservation_value) || null;
+
   const outcomeAnalysis = {
     outcome_type: isAgreement ? 'Successful Agreement' : status === 'DEADLOCK' ? 'Impasse' : 'Failed Negotiation',
     final_price: finalPrice,
-    buyer_target: Number(buyerAgent.target_value) || null,
-    buyer_reservation: Number(buyerAgent.reservation_value) || null,
-    seller_target: Number(sellerAgent.target_value) || null,
-    seller_reservation: Number(sellerAgent.reservation_value) || null,
+    buyer_target: buyerTarget,
+    buyer_reservation: buyerReservation,
+    seller_target: sellerTarget,
+    seller_reservation: sellerReservation,
+    buyer_limits: {
+      target: buyerTarget,
+      reservation: buyerReservation,
+    },
+    seller_limits: {
+      target: sellerTarget,
+      reservation: sellerReservation,
+    },
     human_achieved_goal: isAgreement && isPracticeMode,
     ai_achieved_goal: isAgreement,
+    human_goal_achieved: isAgreement && isPracticeMode,
+    ai_goal_achieved: isAgreement,
+    buyer_goal_achieved: isAgreement && (!buyerReservation || (finalPrice !== null && finalPrice <= buyerReservation)),
+    seller_goal_achieved: isAgreement && (!sellerReservation || (finalPrice !== null && finalPrice >= sellerReservation)),
     reason: isAgreement
       ? `Mutual agreement achieved in Round ${rounds} within the overlapping Zone of Possible Agreement (ZOPA).`
       : 'Session concluded in an impasse due to non-overlapping reservation boundaries.',
+    primary_reason: isAgreement
+      ? `Mutual agreement achieved in Round ${rounds} within the overlapping Zone of Possible Agreement (ZOPA).`
+      : 'Session concluded in an impasse due to non-overlapping reservation boundaries.',
+    details: isAgreement
+      ? `Settlement finalized at ${currency}${finalPrice?.toLocaleString() || 'agreed terms'} across ${rounds} turn rounds.`
+      : 'Impasse reached without convergence.',
   };
 
   return {
