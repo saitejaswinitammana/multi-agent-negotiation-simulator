@@ -155,7 +155,49 @@ function isLeftInBetween(sim) {
   return true;
 }
 
-export default function HistoryReports() {
+// Error Boundary to prevent full unmounting and catch render issues gracefully
+class ReportErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('[ReportErrorBoundary] Caught render error in report:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ maxWidth: '900px', margin: '40px auto', padding: '30px', background: '#fef2f2', border: '1px solid #f87171', borderRadius: '16px', color: '#991b1b', fontFamily: 'Inter, sans-serif' }}>
+          <h2 style={{ margin: '0 0 10px 0', fontSize: '1.4rem', fontWeight: 800 }}>Simulation Report View</h2>
+          <p style={{ margin: '0 0 16px 0', color: '#7f1d1d' }}>A rendering exception was caught while formatting this report record:</p>
+          <pre style={{ background: '#ffffff', padding: '16px', borderRadius: '8px', border: '1px solid #fecaca', overflowX: 'auto', fontSize: '12px', lineHeight: '1.5' }}>
+            {this.state.error?.toString()}
+          </pre>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+            <button
+              onClick={() => { window.location.href = '/history'; }}
+              style={{ padding: '10px 20px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}
+            >
+              ← Back to History List
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              style={{ padding: '10px 20px', background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+            >
+              ↻ Refresh Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function HistoryReportsContent() {
   const navigate = useNavigate();
   const { simulationId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -391,18 +433,23 @@ export default function HistoryReports() {
   // Derived effective summary (loaded summary or instant client fallback)
   const effectiveSummary = useMemo(() => {
     if (!selectedSim) return null;
-    const fallback = generateClientFallbackSummary(selectedSim) || {};
-    const base = postSummary || selectedSim.post_summary || {};
-    return {
-      ...fallback,
-      ...base,
-      resolution_quality: base.resolution_quality || fallback.resolution_quality || null,
-      strategic_agent_critique: base.strategic_agent_critique || fallback.strategic_agent_critique || null,
-      outcome_analysis: {
-        ...(fallback.outcome_analysis || {}),
-        ...(base.outcome_analysis || {}),
-      },
-    };
+    try {
+      const fallback = generateClientFallbackSummary(selectedSim) || {};
+      const base = postSummary || selectedSim.post_summary || {};
+      return {
+        ...fallback,
+        ...base,
+        resolution_quality: base.resolution_quality || fallback.resolution_quality || null,
+        strategic_agent_critique: base.strategic_agent_critique || fallback.strategic_agent_critique || null,
+        outcome_analysis: {
+          ...(fallback.outcome_analysis || {}),
+          ...(base.outcome_analysis || {}),
+        },
+      };
+    } catch (err) {
+      console.warn('Failed to compute effective summary:', err);
+      return postSummary || selectedSim.post_summary || null;
+    }
   }, [selectedSim, postSummary]);
   // Handle selecting a simulation to view full report
   const handleSelectSimulation = (sim) => {
@@ -834,7 +881,7 @@ export default function HistoryReports() {
                           👤 Human Participant (You)
                         </span>
                         <span style={{ color: '#475569' }}>
-                          Role: <strong>{selectedSim.user_role || (getParticipants(selectedSim).buyer.is_human ? getParticipants(selectedSim).buyer.role : getParticipants(selectedSim).vendor.role)}</strong>
+                          Role: <strong>{selectedSim.user_role || (getParticipants(selectedSim).buyer?.is_human ? getParticipants(selectedSim).buyer?.role : (getParticipants(selectedSim).buyer?.role || getParticipants(selectedSim).vendor?.role))}</strong>
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -842,7 +889,7 @@ export default function HistoryReports() {
                           🤖 AI Counterpart
                         </span>
                         <span style={{ color: '#475569' }}>
-                          Role: <strong>{getParticipants(selectedSim).vendor.is_human ? getParticipants(selectedSim).buyer.name : getParticipants(selectedSim).vendor.name}</strong> ({getParticipants(selectedSim).vendor.personality || 'Collaborative'})
+                          Role: <strong>{getParticipants(selectedSim).vendor?.is_human ? getParticipants(selectedSim).buyer?.name : getParticipants(selectedSim).vendor?.name}</strong> ({getParticipants(selectedSim).vendor?.personality || 'Collaborative'})
                         </span>
                       </div>
                     </>
@@ -853,7 +900,7 @@ export default function HistoryReports() {
                           🤖 Agent 1
                         </span>
                         <span style={{ color: '#475569' }}>
-                          <strong>{getParticipants(selectedSim).vendor.name}</strong> ({getParticipants(selectedSim).vendor.role}, {getParticipants(selectedSim).vendor.personality || 'Analytical'})
+                          <strong>{getParticipants(selectedSim).vendor?.name}</strong> ({getParticipants(selectedSim).vendor?.role}, {getParticipants(selectedSim).vendor?.personality || 'Analytical'})
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -861,7 +908,7 @@ export default function HistoryReports() {
                           🤖 Agent 2
                         </span>
                         <span style={{ color: '#475569' }}>
-                          <strong>{getParticipants(selectedSim).buyer.name}</strong> ({getParticipants(selectedSim).buyer.role}, {getParticipants(selectedSim).buyer.personality || 'Collaborative'})
+                          <strong>{getParticipants(selectedSim).buyer?.name}</strong> ({getParticipants(selectedSim).buyer?.role}, {getParticipants(selectedSim).buyer?.personality || 'Collaborative'})
                         </span>
                       </div>
                     </>
@@ -2010,5 +2057,13 @@ export default function HistoryReports() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function HistoryReports(props) {
+  return (
+    <ReportErrorBoundary>
+      <HistoryReportsContent {...props} />
+    </ReportErrorBoundary>
   );
 }
