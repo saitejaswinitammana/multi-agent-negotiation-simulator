@@ -1642,3 +1642,268 @@ function handleLocalDeadlockAction(simulationId, payload) {
 
   return sim;
 }
+
+/**
+ * ============================================================================
+ * Post-Interaction Summary Agent Engine (Milestone 4 - Member 1 Feature)
+ * Client-Side Fallback & Network-Resilient Summary Generator
+ * ============================================================================
+ */
+
+/**
+ * Client-side fallback summary generator for offline/cold-start resilience.
+ * Ingests multi-round logs, extracts opening bids, concession milestones,
+ * compromise proposals, and generates executive narrative.
+ */
+export function generateClientFallbackSummary(simulation) {
+  if (!simulation) {
+    return null;
+  }
+
+  const agents = simulation.agents || [];
+  const messages = simulation.messages || [];
+  const offers = simulation.offers || [];
+  const agreement = simulation.agreement;
+  const status = simulation.status || 'COMPLETED';
+  const isAgreement = status === 'COMPLETED' || status === 'AGREEMENT_REACHED' || Boolean(agreement);
+  const rounds = simulation.current_round || 1;
+  const currency = simulation.scenario_id === 'job-offer' ? '₹' : '₹';
+
+  const fmt = (val) => {
+    if (val === null || val === undefined || isNaN(Number(val))) return 'N/A';
+    return `${currency}${Number(val).toLocaleString()}`;
+  };
+
+  const isPracticeMode = Boolean(
+    simulation.is_practice ||
+    simulation.mode === 'practice' ||
+    agents.some((a) => a.is_human === true || a.personality === 'Human')
+  );
+
+  // 1. Extract Opening Bids
+  const openingBids = [];
+  const seenRoles = new Set();
+
+  for (const offer of offers) {
+    if (offer.agent_role && !seenRoles.has(offer.agent_role)) {
+      seenRoles.add(offer.agent_role);
+      const agent = agents.find((a) => a.role === offer.agent_role) || {};
+      openingBids.push({
+        agent_role: offer.agent_role,
+        agent_name: agent.name || offer.agent_role,
+        personality: agent.personality || 'Unknown',
+        is_human: Boolean(agent.is_human || agent.personality === 'Human'),
+        round_number: offer.round_number || 1,
+        offer_value: offer.offer_value,
+        terms: offer.terms || {},
+      });
+    }
+  }
+
+  if (openingBids.length === 0) {
+    for (const msg of messages) {
+      if (
+        msg.offer_value !== null &&
+        msg.offer_value !== undefined &&
+        msg.sender_role &&
+        !seenRoles.has(msg.sender_role) &&
+        msg.sender_type !== 'ORCHESTRATOR'
+      ) {
+        seenRoles.add(msg.sender_role);
+        const agent = agents.find((a) => a.role === msg.sender_role) || {};
+        openingBids.push({
+          agent_role: msg.sender_role,
+          agent_name: msg.sender_name || agent.name || msg.sender_role,
+          personality: msg.personality || agent.personality || 'Unknown',
+          is_human: Boolean(agent.is_human || agent.personality === 'Human' || msg.sender_type === 'HUMAN'),
+          round_number: msg.round_number || 1,
+          offer_value: msg.offer_value,
+          terms: msg.terms || {},
+        });
+      }
+    }
+  }
+
+  // 2. Extract Concession Milestones
+  const concessionMilestones = [];
+  const lastOffers = {};
+
+  for (const msg of messages) {
+    if (
+      msg.sender_type === 'ORCHESTRATOR' ||
+      !msg.sender_role ||
+      msg.offer_value === null ||
+      msg.offer_value === undefined
+    ) {
+      continue;
+    }
+
+    const role = msg.sender_role;
+    const currentVal = Number(msg.offer_value);
+    const prevVal = lastOffers[role];
+
+    if (prevVal !== undefined && prevVal !== currentVal) {
+      const delta = currentVal - prevVal;
+      const direction = delta > 0 ? 'increased' : 'decreased';
+      concessionMilestones.push({
+        round: msg.round_number,
+        agent_role: role,
+        agent_name: msg.sender_name,
+        previous_value: prevVal,
+        new_value: currentVal,
+        concession_amount: Math.abs(delta),
+        direction,
+        action: msg.action || 'COUNTER_OFFER',
+        description: `${msg.sender_name} (${role}) ${direction} offer from ${fmt(prevVal)} to ${fmt(currentVal)} in Round ${msg.round_number}.`,
+      });
+    }
+
+    lastOffers[role] = currentVal;
+  }
+
+  // 3. Extract Compromise Proposals
+  const compromiseProposals = [];
+  const deadlockRes = simulation.deadlock_resolution;
+  if (deadlockRes?.initial_compromise) {
+    compromiseProposals.push({
+      type: 'DEADLOCK_INITIAL_COMPROMISE',
+      round: deadlockRes.initial_compromise.round || rounds,
+      proposed_value: deadlockRes.initial_compromise.offer_value,
+      summary: deadlockRes.initial_compromise.summary || 'Orchestrator calculated midpoint compromise proposal.',
+    });
+  }
+
+  // 4. Generate Mode-Specific Narrative
+  let executiveNarrative = '';
+  let practiceInsights = null;
+
+  if (isPracticeMode) {
+    const humanAgent = agents.find((a) => a.is_human || a.personality === 'Human') || agents[0] || {
+      name: 'User',
+      role: 'Human Participant',
+    };
+    const opponent = agents.find((a) => a !== humanAgent) || agents[1] || {
+      name: 'AI Counterpart',
+      role: 'Opponent',
+      personality: 'Collaborative',
+    };
+
+    const humanMilestones = concessionMilestones.filter((m) => m.agent_role === humanAgent.role);
+    let style = 'Balanced and Strategic';
+    if (humanMilestones.length === 0) style = 'Anchor-Focused and Firm';
+    else if (humanMilestones.length >= 3) style = 'Flexible and Collaborative';
+
+    executiveNarrative = `In this Practice Mode session on ${simulation.scenario_title || 'Negotiation'}, you negotiated against ${opponent.name} (${opponent.role}, ${opponent.personality}) across ${rounds} rounds. `;
+    const hOpen = openingBids.find((b) => b.agent_role === humanAgent.role);
+    if (hOpen) {
+      executiveNarrative += `You established an initial anchor of ${fmt(hOpen.offer_value)}. `;
+    }
+    executiveNarrative += `Your bargaining trajectory reflected a ${style} profile, executing ${humanMilestones.length} concession adjustments. `;
+
+    if (isAgreement) {
+      executiveNarrative += `The interaction successfully concluded with mutual agreement reached at ${fmt(agreement?.final_value)} in Round ${rounds}.`;
+    } else {
+      executiveNarrative += `The negotiation reached an impasse in Round ${rounds} due to reservation gap constraints.`;
+    }
+
+    const pivotalPoints = [
+      {
+        round: 1,
+        title: 'Opening Anchor',
+        impact: `Established bargaining baseline at ${fmt(hOpen?.offer_value || 0)}.`,
+      },
+    ];
+
+    if (humanMilestones.length > 0) {
+      const topMove = [...humanMilestones].sort((a, b) => b.concession_amount - a.concession_amount)[0];
+      pivotalPoints.push({
+        round: topMove.round,
+        title: 'Decisive Concession',
+        impact: `Adjusted position by ${fmt(topMove.concession_amount)} to facilitate agreement.`,
+      });
+    }
+
+    pivotalPoints.push({
+      round: rounds,
+      title: isAgreement ? 'Agreement Settlement' : 'Impasse Termination',
+      impact: isAgreement ? `Final terms settled at ${fmt(agreement?.final_value)}.` : 'Session concluded at deadlock.',
+    });
+
+    practiceInsights = {
+      style_assessment: style,
+      human_total_offers: messages.filter((m) => m.sender_type === 'HUMAN').length,
+      pivotal_decision_points: pivotalPoints,
+    };
+  } else {
+    const a1 = agents[0] || { name: 'Agent 1', role: 'Buyer', personality: 'Collaborative' };
+    const a2 = agents[1] || { name: 'Agent 2', role: 'Seller', personality: 'Aggressive' };
+
+    executiveNarrative = `In this autonomous simulation (${simulation.scenario_title || 'Commercial'}), ${a1.name} (${a1.role}, ${a1.personality}) and ${a2.name} (${a2.role}, ${a2.personality}) engaged in multi-issue turn taking across ${rounds} rounds. `;
+    if (openingBids.length >= 2) {
+      executiveNarrative += `Initial anchors opened at ${fmt(openingBids[0].offer_value)} vs ${fmt(openingBids[1].offer_value)}. `;
+    }
+    executiveNarrative += `The agents exchanged ${concessionMilestones.length} major concessions. `;
+
+    if (isAgreement) {
+      executiveNarrative += `The negotiation achieved mutual convergence at ${fmt(agreement?.final_value || 'deal value')} in Round ${rounds}.`;
+    } else {
+      executiveNarrative += `Negotiation reached a deadlock in Round ${rounds} after exhausting concession limits.`;
+    }
+  }
+
+  return {
+    simulation_id: simulation.id,
+    scenario_id: simulation.scenario_id,
+    scenario_title: simulation.scenario_title,
+    mode: isPracticeMode ? 'Practice Mode (Human vs AI)' : 'Simulation Mode (AI vs AI)',
+    is_practice: isPracticeMode,
+    outcome: isAgreement ? 'AGREEMENT_REACHED' : status === 'DEADLOCK' ? 'DEADLOCK' : 'CONCLUDED',
+    final_round: rounds,
+    final_terms: isAgreement
+      ? { final_value: agreement?.final_value, status: 'SETTLED' }
+      : { final_gap: simulation.current_gap || 0, status: 'UNRESOLVED' },
+    opening_bids: openingBids,
+    concession_milestones: concessionMilestones,
+    compromise_proposals: compromiseProposals,
+    executive_narrative: executiveNarrative,
+    practice_insights: practiceInsights,
+    is_client_fallback: true,
+    generated_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Fetch Post-Interaction Summary with automatic offline client fallback
+ */
+export async function getSimulationSummary(simulationId) {
+  try {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(`${BACKEND_URL}/api/simulations/${encodeURIComponent(simulationId)}/summary`, {
+      headers: { ...authHeaders },
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.data) return json.data;
+    }
+  } catch (err) {
+    console.warn('[Simulation API] Backend summary fetch failed, using client fallback:', err.message);
+  }
+
+  // Resilient Fallback: generate summary from local simulation state
+  const cachedSim = localSimulationsCache.get(simulationId);
+  if (cachedSim) {
+    return generateClientFallbackSummary(cachedSim);
+  }
+
+  try {
+    const state = await getSimulationState(simulationId);
+    if (state) {
+      return generateClientFallbackSummary(state);
+    }
+  } catch (stateErr) {
+    console.warn('[Simulation API] Unable to retrieve simulation state for summary fallback:', stateErr.message);
+  }
+
+  return null;
+}
