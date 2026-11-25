@@ -59,7 +59,7 @@ function isLeftInBetween(sim) {
 }
 
 // Retrieve stored practice mode sessions strictly isolated in localStorage
-function getStoredPracticeSessions() {
+export function getStoredPracticeSessions() {
   try {
     const raw = localStorage.getItem('practice_mode_sessions');
     if (raw) {

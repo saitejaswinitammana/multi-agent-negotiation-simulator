@@ -40,6 +40,7 @@ import {
   getSimulationSummary,
   generateClientFallbackSummary,
 } from '../services/simulationApi';
+import { getStoredPracticeSessions } from './NegotiationAnalytics';
 import SentimentJourneyTimeline from '../components/SentimentJourneyTimeline';
 import './HistoryReports.css';
 
@@ -226,7 +227,7 @@ function HistoryReportsContent() {
 
   const reportPrintRef = useRef(null);
 
-  // Load Simulations List: strictly Vendor, Job, and Project scenarios for the active account
+  // Load Simulations List: combines both Simulation Mode (Autonomous) and Practice Mode sessions
   const fetchSimulations = async () => {
     setLoading(true);
     setError(null);
@@ -234,12 +235,12 @@ function HistoryReportsContent() {
       const userEmail = currentUser?.email || null;
       const userId = currentUser?.uid || null;
       const liveList = await listSimulations(userEmail, userId);
+
+      // 1. Simulation Mode Sessions (strictly matching NegotiationAnalytics Simulation Mode: 32 sessions)
+      let simulationSims = [];
       if (liveList && liveList.length > 0) {
-        // Defensive user scoping: ensures user only sees their own simulations
         const userSims = liveList.filter(s => {
-          if (!currentUser?.email && !currentUser?.uid) {
-            return true;
-          }
+          if (!currentUser?.email && !currentUser?.uid) return true;
           if (currentUser?.email && s.user_email) {
             return s.user_email.toLowerCase() === currentUser.email.toLowerCase();
           }
@@ -247,49 +248,62 @@ function HistoryReportsContent() {
             return s.user_id === currentUser.uid;
           }
           if (!s.user_email && !s.user_id) {
-            // Unattributed legacy records belong only to primary author
             return currentUser?.email?.toLowerCase() === 'shubhayyadav84@gmail.com';
           }
           return false;
         });
 
-        // Filter strictly to the 3 official scenarios: vendor-pricing, job-offer, project-budget
-        const officialSims = userSims.filter(s => {
+        simulationSims = userSims.filter(s => {
+          const isPractice =
+            s.mode === 'practice' ||
+            s.is_practice === true ||
+            (s.id && s.id.includes('practice')) ||
+            (Array.isArray(s.agents) && s.agents.some((a) => a.personality === 'Human' || a.is_human === true));
+          if (isPractice) return false;
+
           const sid = (s.scenario_id || '').toLowerCase();
           const title = (s.scenario_title || '').toLowerCase();
-
-          // Reject any legacy SaaS or Lease mock titles
-          if (title.includes('saas') || title.includes('lease') || title.includes('office space')) {
-            return false;
-          }
+          if (title.includes('saas') || title.includes('lease') || title.includes('office space')) return false;
 
           const isVendor = sid === 'vendor-pricing' || title.includes('vendor');
           const isJob = sid === 'job-offer' || title.includes('job');
           const isProject = sid === 'project-budget' || title.includes('project');
-
           return isVendor || isJob || isProject;
         }).map(s => {
-          // Standardize clean title if needed
           const sid = (s.scenario_id || '').toLowerCase();
           const title = (s.scenario_title || '').toLowerCase();
           let cleanTitle = s.scenario_title;
-          if (sid === 'vendor-pricing' || title.includes('vendor')) {
-            cleanTitle = 'Vendor Pricing Negotiation';
-          } else if (sid === 'job-offer' || title.includes('job')) {
-            cleanTitle = 'Job Offer Negotiation';
-          } else if (sid === 'project-budget' || title.includes('project')) {
-            cleanTitle = 'Project Budget Allocation';
-          }
-          return { ...s, scenario_title: cleanTitle };
+          if (sid === 'vendor-pricing' || title.includes('vendor')) cleanTitle = 'Vendor Pricing Negotiation';
+          else if (sid === 'job-offer' || title.includes('job')) cleanTitle = 'Job Offer Negotiation';
+          else if (sid === 'project-budget' || title.includes('project')) cleanTitle = 'Project Budget Allocation';
+          return { ...s, scenario_title: cleanTitle, is_practice: false, mode: 'simulation' };
         });
-
-        setSimulations(officialSims);
-      } else {
-        setSimulations([]);
       }
+
+      // 2. Practice Mode Sessions (strictly matching NegotiationAnalytics Practice Mode: 47 sessions)
+      const storedPractice = getStoredPracticeSessions() || [];
+      const practiceSims = storedPractice.map(p => {
+        const sid = (p.scenario_id || '').toLowerCase();
+        const title = (p.scenario_title || '').toLowerCase();
+        let cleanTitle = p.scenario_title;
+        if (sid === 'vendor-pricing' || title.includes('vendor')) cleanTitle = 'Vendor Pricing Negotiation';
+        else if (sid === 'job-offer' || title.includes('job')) cleanTitle = 'Job Offer Negotiation';
+        else if (sid === 'project-budget' || title.includes('project')) cleanTitle = 'Project Budget Allocation';
+        return {
+          ...p,
+          scenario_title: cleanTitle,
+          is_practice: true,
+          mode: 'practice',
+        };
+      });
+
+      // 3. Combined Sessions: Total count addition (Simulation Mode + Practice Mode)
+      setSimulations([...simulationSims, ...practiceSims]);
     } catch (err) {
       console.warn('Failed to fetch simulations:', err);
-      setSimulations([]);
+      const storedPractice = getStoredPracticeSessions() || [];
+      const practiceSims = storedPractice.map(p => ({ ...p, is_practice: true, mode: 'practice' }));
+      setSimulations(practiceSims);
     } finally {
       setLoading(false);
     }
@@ -318,6 +332,34 @@ function HistoryReportsContent() {
         return;
       }
 
+      // If it's a practice session with offers but no messages, synthesize messages so report loads smoothly
+      if (foundInState && (foundInState.is_practice || foundInState.mode === 'practice' || String(foundInState.id).startsWith('practice-seed'))) {
+        const syntheticMessages = (foundInState.messages && foundInState.messages.length > 0)
+          ? foundInState.messages
+          : (foundInState.offers || []).map((o, idx) => ({
+              id: `msg_sync_${idx}`,
+              round_number: o.round_number || 1,
+              sender_role: o.agent_role,
+              sender_name: o.agent_role,
+              sender_type: o.is_human || /buyer|candidate|engineering/i.test(o.agent_role) ? 'HUMAN' : 'AGENT',
+              offer_value: o.offer_value,
+              action: idx === (foundInState.offers || []).length - 1 && (foundInState.status === 'AGREEMENT_REACHED' || foundInState.status === 'COMPLETED') ? 'ACCEPT' : 'COUNTER_OFFER',
+              message: `Proposal submitted at ₹${Number(o.offer_value).toLocaleString()}.`,
+            }));
+
+        const hydrated = {
+          ...foundInState,
+          messages: syntheticMessages,
+          agents: foundInState.agents && foundInState.agents.length > 0 ? foundInState.agents : [
+            { role: foundInState.userRole || 'Human Participant', name: 'You', is_human: true, personality: 'Human' },
+            { role: foundInState.opponentRole || 'AI Opponent', name: foundInState.opponentRole || 'AI', personality: foundInState.opponentPersonality || 'Collaborative' },
+          ],
+        };
+        setSelectedSim(hydrated);
+        setLoadingDetail(false);
+        return;
+      }
+
       // Otherwise fetch from backend API
       try {
         const fullSim = await getSimulationState(targetId);
@@ -328,6 +370,7 @@ function HistoryReportsContent() {
         }
       } catch (err) {
         console.warn('Failed to load full simulation details:', err);
+        if (foundInState) setSelectedSim(foundInState);
       } finally {
         setLoadingDetail(false);
       }
@@ -530,7 +573,7 @@ function HistoryReportsContent() {
     });
   }, [simulations, searchQuery, filterMode, filterOutcome, sortBy]);
 
-  // Aggregate statistics across completed and left-in-between simulations
+  // Aggregate statistics across completed and left-in-between simulations (Combines Simulation + Practice)
   const stats = useMemo(() => {
     const validSims = simulations.filter(s =>
       s.status === 'COMPLETED' ||
@@ -546,10 +589,13 @@ function HistoryReportsContent() {
     const leftInBetween = validSims.filter(s => isLeftInBetween(s)).length;
     const agreementRate = total > 0 ? Math.round((agreements / total) * 100) : 0;
     const avgRounds = total > 0
-      ? (validSims.reduce((acc, curr) => acc + (curr.current_round || 1), 0) / total).toFixed(1)
+      ? (validSims.reduce((acc, curr) => acc + (curr.current_round || curr.rounds || 1), 0) / total).toFixed(1)
       : '0.0';
 
-    return { total, agreements, deadlocks, leftInBetween, agreementRate, avgRounds };
+    const simulationCount = validSims.filter(s => !s.is_practice && s.mode !== 'practice').length;
+    const practiceCount = validSims.filter(s => s.is_practice || s.mode === 'practice').length;
+
+    return { total, agreements, deadlocks, leftInBetween, agreementRate, avgRounds, simulationCount, practiceCount };
   }, [simulations]);
 
   // Offer points for chart rendering
@@ -1842,7 +1888,14 @@ function HistoryReportsContent() {
           <div className="history-metrics-strip">
             <div className="metric-strip-item">
               <span className="metric-strip-num">{stats.total}</span>
-              <span className="metric-strip-label">All Completed</span>
+              <span className="metric-strip-label">
+                All Completed
+                {stats.simulationCount > 0 && stats.practiceCount > 0 && (
+                  <span style={{ display: 'block', fontSize: '0.74rem', opacity: 0.8, fontWeight: 500, marginTop: '2px' }}>
+                    ({stats.simulationCount} Sim + {stats.practiceCount} Practice)
+                  </span>
+                )}
+              </span>
             </div>
             <div className="metric-strip-item">
               <span className="metric-strip-num text-success">{stats.agreements}</span>
