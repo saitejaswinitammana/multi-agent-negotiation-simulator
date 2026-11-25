@@ -1266,6 +1266,13 @@ const NegotiationArena = () => {
         opponentPersonality: opponentAgent?.personality || 'Collaborative',
         is_human: true,
         mode: 'practice',
+        agents: simulation.agents || [
+          { role: humanAgent?.role || 'Procurement Buyer', name: 'You', is_human: true, personality: 'Human' },
+          { role: opponentAgent?.role || 'Enterprise Supplier', name: opponentAgent?.name || opponentAgent?.role || 'Supplier', personality: opponentAgent?.personality || 'Collaborative' },
+        ],
+        messages: simulation.messages || [],
+        offers: simulation.offers || [],
+        agreement: simulation.agreement || null,
       };
 
       const existingIdx = sessions.findIndex((s) => s.id === record.id);
