@@ -164,6 +164,257 @@ function extractCompromiseProposals(simulation) {
 }
 
 /**
+ * Generates qualitative comparative strategic analysis for Simulation Mode (AI vs AI)
+ * Explains which agent demonstrated better negotiation strategies and why without numerical scores.
+ */
+function generateStrategicAgentCritique(simulation, openingBids, milestones) {
+  const agents = simulation.agents || [];
+  const status = simulation.status || 'COMPLETED';
+  const agreement = simulation.agreement;
+  const isAgreement = status === 'COMPLETED' || status === 'AGREEMENT_REACHED' || Boolean(agreement);
+
+  const agent1 = agents[0] || { name: 'Agent 1', role: 'Buyer', personality: 'Collaborative', target_value: 90000, reservation_value: 115000 };
+  const agent2 = agents[1] || { name: 'Agent 2', role: 'Seller', personality: 'Aggressive', target_value: 120000, reservation_value: 95000 };
+
+  const a1Milestones = milestones.filter((m) => m.agent_role === agent1.role);
+  const a2Milestones = milestones.filter((m) => m.agent_role === agent2.role);
+
+  const a1TotalConcession = a1Milestones.reduce((sum, m) => sum + (m.concession_amount || 0), 0);
+  const a2TotalConcession = a2Milestones.reduce((sum, m) => sum + (m.concession_amount || 0), 0);
+
+  // Determine better agent qualitatively
+  let betterAgent = agent1;
+  let reasonCritique = '';
+
+  if (isAgreement) {
+    const finalVal = Number(agreement?.final_value || simulation.agreement_final_value || 0);
+    // If agent1 is buyer / lower side
+    const isA1Lower = /buyer|procurement|purchasing|recruiter|hiring/i.test(`${agent1.role} ${agent1.name}`);
+    if (isA1Lower && Number.isFinite(finalVal) && Number.isFinite(Number(agent1.target_value))) {
+      const a1DistanceToTarget = Math.abs(finalVal - Number(agent1.target_value));
+      const a2DistanceToTarget = Math.abs(finalVal - Number(agent2.target_value || 0));
+      if (a1DistanceToTarget <= a2DistanceToTarget) {
+        betterAgent = agent1;
+        reasonCritique = `${agent1.name} (${agent1.role}) demonstrated superior negotiation strategy by defending its reservation boundary and yielding fewer unforced concessions. It forced ${agent2.name} to absorb ${a2TotalConcession > a1TotalConcession ? 'the greater share of price movement' : 'reciprocal concessions'}, concluding settlement closer to its target valuation.`;
+      } else {
+        betterAgent = agent2;
+        reasonCritique = `${agent2.name} (${agent2.role}) demonstrated superior strategic posture through disciplined anchor defense. Despite initial resistance, it preserved favorable pricing terms and required ${agent1.name} to concede upward before converging on mutual agreement.`;
+      }
+    } else {
+      betterAgent = a1TotalConcession <= a2TotalConcession ? agent1 : agent2;
+      reasonCritique = `${betterAgent.name} (${betterAgent.role}) exhibited stronger tactical discipline by pacing concessions gradually, avoiding sudden price drops, and maintaining alignment with core utility goals.`;
+    }
+  } else {
+    // Deadlock / Impasse
+    betterAgent = a1Milestones.length > 0 ? agent1 : agent2;
+    reasonCritique = `In this deadlock impasse, ${betterAgent.name} (${betterAgent.role}) demonstrated more constructive bargaining behavior by tabling counteroffers and exploring compromise zones, whereas excessive stance rigidity stalled agreement convergence.`;
+  }
+
+  return {
+    better_agent: `${betterAgent.name} (${betterAgent.role})`,
+    rationale: reasonCritique,
+    comparisons: [
+      {
+        dimension: 'Opening Anchor Firmness',
+        analysis: `${openingBids[0]?.agent_name || agent1.name} established initial position at ${formatCurrency(openingBids[0]?.offer_value)}, while ${openingBids[1]?.agent_name || agent2.name} opened at ${formatCurrency(openingBids[1]?.offer_value)}. Both anchors created a structured ZOPA boundary.`,
+      },
+      {
+        dimension: 'Concession Discipline & Pacing',
+        analysis: `${agent1.name} executed ${a1Milestones.length} concession adjustments (${formatCurrency(a1TotalConcession)} cumulative) versus ${agent2.name}'s ${a2Milestones.length} adjustments (${formatCurrency(a2TotalConcession)} cumulative).`,
+      },
+      {
+        dimension: 'Tactical Stance Adaptation',
+        analysis: `${agent1.personality} profile adopted an adaptive posture, while ${agent2.personality} maintained pressure on core monetary terms across all active rounds.`,
+      },
+    ],
+  };
+}
+
+/**
+ * Calculates Negotiation Resolution Quality Score exclusively for Practice Mode (Human vs AI)
+ * 1. Goal Achievement – 30%
+ * 2. Agreement Status – 25%
+ * 3. Negotiation Effectiveness – 25%
+ * 4. Concession Management – 20%
+ */
+function calculatePracticeResolutionQuality(simulation, openingBids, milestones) {
+  const agents = simulation.agents || [];
+  const status = simulation.status || 'COMPLETED';
+  const agreement = simulation.agreement;
+  const isAgreement = status === 'COMPLETED' || status === 'AGREEMENT_REACHED' || Boolean(agreement);
+  const isDeadlock = status === 'DEADLOCK';
+
+  const humanAgent = agents.find((a) => a.is_human || a.personality === 'Human') || agents[0] || {
+    role: 'Candidate',
+    target_value: 180000,
+    reservation_value: 140000,
+  };
+  const aiAgent = agents.find((a) => a !== humanAgent) || agents[1] || {
+    role: 'Employer',
+    target_value: 130000,
+    reservation_value: 165000,
+  };
+
+  const target = Number(humanAgent.target_value);
+  const reservation = Number(humanAgent.reservation_value);
+  const finalVal = Number(agreement?.final_value || simulation.agreement_final_value || 0);
+
+  const isLowerSide = /buyer|procurement|purchasing|recruiter|hiring/i.test(`${humanAgent.role} ${humanAgent.name}`);
+
+  // 1. Goal Achievement (30%)
+  let goalAchievement = 50;
+  if (isAgreement && Number.isFinite(finalVal) && Number.isFinite(target) && Number.isFinite(reservation)) {
+    if (isLowerSide) {
+      if (finalVal <= target) goalAchievement = 100;
+      else if (finalVal >= reservation) goalAchievement = 10;
+      else goalAchievement = Math.max(10, Math.min(100, Math.round(((reservation - finalVal) / (reservation - target)) * 100)));
+    } else {
+      if (finalVal >= target) goalAchievement = 100;
+      else if (finalVal <= reservation) goalAchievement = 10;
+      else goalAchievement = Math.max(10, Math.min(100, Math.round(((finalVal - reservation) / (target - reservation)) * 100)));
+    }
+  } else if (isDeadlock) {
+    goalAchievement = 35; // Fair partial evaluation for maintaining reservation floor
+  }
+
+  // 2. Agreement Status (25%)
+  let agreementStatus = 40;
+  if (isAgreement) {
+    agreementStatus = 100;
+  } else if (isDeadlock) {
+    const currentGap = Number(simulation.current_gap || 0);
+    agreementStatus = currentGap > 0 && currentGap < 20000 ? 55 : 35; // Partial credit for narrowing gap
+  }
+
+  // 3. Negotiation Effectiveness (25%)
+  const rounds = Number(simulation.current_round || 1);
+  const humanMilestones = milestones.filter((m) => m.agent_role === humanAgent.role);
+  let effectiveness = 75;
+  if (rounds >= 2 && rounds <= 6) effectiveness += 15;
+  else if (rounds === 1) effectiveness -= 20; // Premature settlement
+  if (humanMilestones.length >= 1) effectiveness += 10;
+  effectiveness = Math.max(20, Math.min(100, effectiveness));
+
+  // 4. Concession Management (20%)
+  let concessionManagement = 80;
+  if (humanMilestones.length > 0) {
+    const suddenDrop = humanMilestones.some((m) => m.concession_amount > 15000);
+    if (suddenDrop) concessionManagement -= 20;
+    else concessionManagement += 10;
+  } else if (rounds > 2) {
+    concessionManagement -= 15; // Complete rigidity
+  }
+  concessionManagement = Math.max(20, Math.min(100, concessionManagement));
+
+  // Weighted Total
+  const overall = Math.round(
+    goalAchievement * 0.30 +
+    agreementStatus * 0.25 +
+    effectiveness * 0.25 +
+    concessionManagement * 0.20
+  );
+
+  const badge = overall >= 85 ? 'Excellent' : overall >= 70 ? 'Competent' : 'Developing';
+
+  const strengths = [];
+  const weaknesses = [];
+
+  if (goalAchievement >= 70) {
+    strengths.push(`Strong Target Realization: Secured terms yielding high utility relative to your reservation limit.`);
+  } else {
+    weaknesses.push(`Surplus Compromise: Final terms settled closer to your reservation threshold than your initial target.`);
+  }
+
+  if (isAgreement) {
+    strengths.push(`Successful Deal Convergence: Successfully reconciled positions within the overlapping ZOPA.`);
+  } else {
+    weaknesses.push(`Unresolved Standoff: Failed to discover reciprocal compromise before session round limits expired.`);
+  }
+
+  if (concessionManagement >= 75) {
+    strengths.push(`Disciplined Concession Pacing: Executed measured concessions to prevent rapid surplus erosion.`);
+  } else {
+    weaknesses.push(`Concession Pacing: Made abrupt position jumps or remained overly rigid during pivotal turns.`);
+  }
+
+  let explanation = '';
+  if (overall >= 85) {
+    explanation = 'Outstanding negotiation execution. You anchored effectively, controlled concession tempo, and achieved a highly favorable settlement.';
+  } else if (overall >= 70) {
+    explanation = 'Competent bargaining performance. You successfully advanced the negotiation and achieved a viable outcome while maintaining professional composure.';
+  } else {
+    explanation = 'Sub-optimal resolution outcome. The session concluded with unresolved gap resistance or disproportionate concessions. Focus on strategic anchoring and reciprocal concessions.';
+  }
+
+  return {
+    overall_score: overall,
+    badge,
+    factors: {
+      goal_achievement: { score: goalAchievement, weight: 30, label: 'Goal Achievement' },
+      agreement_status: { score: agreementStatus, weight: 25, label: 'Agreement Status' },
+      negotiation_effectiveness: { score: effectiveness, weight: 25, label: 'Negotiation Effectiveness' },
+      concession_management: { score: concessionManagement, weight: 20, label: 'Concession Management' },
+    },
+    explanation,
+    strengths,
+    weaknesses,
+  };
+}
+
+/**
+ * Calculates Final Negotiation Outcome Analysis (Both Modes)
+ */
+function calculateOutcomeAnalysis(simulation, isPracticeMode) {
+  const status = simulation.status || 'COMPLETED';
+  const agreement = simulation.agreement;
+  const isAgreement = status === 'COMPLETED' || status === 'AGREEMENT_REACHED' || Boolean(agreement);
+  const isDeadlock = status === 'DEADLOCK';
+  const agents = simulation.agents || [];
+
+  const finalVal = isAgreement ? Number(agreement?.final_value || simulation.agreement_final_value || 0) : null;
+
+  const buyer = agents.find((a) => /buyer|procurement|purchasing|recruiter|hiring|engineering/i.test(`${a.role} ${a.name}`)) || agents[0] || {};
+  const seller = agents.find((a) => a !== buyer) || agents[1] || {};
+
+  const outcomeType = isAgreement
+    ? 'Successful Agreement'
+    : isDeadlock
+    ? 'Impasse'
+    : 'Failed Negotiation';
+
+  let reason = '';
+  if (isAgreement) {
+    reason = `Mutual convergence achieved in Round ${simulation.current_round || 1}. Both parties established viable compromise terms within the overlapping Zone of Possible Agreement (ZOPA).`;
+  } else if (isDeadlock) {
+    reason = simulation.deadlock_reason || simulation.deadlock_resolution?.reason || 'Negotiation halted due to irreconcilable reservation limits and gap resistance.';
+  } else {
+    reason = 'Session ended without reaching formal agreement within allowable round parameters.';
+  }
+
+  const humanAgent = agents.find((a) => a.is_human || a.personality === 'Human');
+  const humanAchieved = isAgreement && humanAgent
+    ? (/buyer|recruiter/i.test(humanAgent.role) ? finalVal <= Number(humanAgent.reservation_value) : finalVal >= Number(humanAgent.reservation_value))
+    : false;
+
+  const aiAgent = agents.find((a) => a !== humanAgent);
+  const aiAchieved = isAgreement && aiAgent
+    ? (/seller|candidate/i.test(aiAgent.role) ? finalVal >= Number(aiAgent.reservation_value) : finalVal <= Number(aiAgent.reservation_value))
+    : false;
+
+  return {
+    outcome_type: outcomeType,
+    final_price: finalVal,
+    buyer_target: Number(buyer.target_value) || null,
+    buyer_reservation: Number(buyer.reservation_value) || null,
+    seller_target: Number(seller.target_value) || null,
+    seller_reservation: Number(seller.reservation_value) || null,
+    human_achieved_goal: humanAchieved,
+    ai_achieved_goal: aiAchieved,
+    reason,
+  };
+}
+
+/**
  * Generates executive narrative and analysis for Simulation Mode (AI vs AI)
  */
 function generateSimulationModeNarrative(simulation, openingBids, milestones, compromises) {
@@ -209,7 +460,14 @@ function generateSimulationModeNarrative(simulation, openingBids, milestones, co
     narrative += `The negotiation concluded in a deadlock after ${rounds} rounds without reaching mutual consensus. Primary deadlock trigger: ${reason}.`;
   }
 
-  return narrative;
+  const critique = generateStrategicAgentCritique(simulation, openingBids, milestones);
+  const outcomeAnalysis = calculateOutcomeAnalysis(simulation, false);
+
+  return {
+    narrative,
+    strategic_agent_critique: critique,
+    outcome_analysis: outcomeAnalysis,
+  };
 }
 
 /**
@@ -308,11 +566,16 @@ function generatePracticeModeNarrative(simulation, openingBids, milestones, comp
       : 'Concluded session with unresolved reservation gaps.',
   });
 
+  const resolutionQuality = calculatePracticeResolutionQuality(simulation, openingBids, milestones);
+  const outcomeAnalysis = calculateOutcomeAnalysis(simulation, true);
+
   return {
     narrative,
     style_assessment: styleAssessment,
     human_total_offers: humanOffers.length,
     pivotal_decision_points: pivotalPoints,
+    resolution_quality: resolutionQuality,
+    outcome_analysis: outcomeAnalysis,
   };
 }
 
@@ -341,6 +604,9 @@ function generatePostInteractionSummary(simulation) {
 
   let executiveNarrative = '';
   let practiceInsights = null;
+  let resolutionQuality = null;
+  let strategicAgentCritique = null;
+  let outcomeAnalysis = null;
 
   if (isPracticeMode) {
     const practiceResult = generatePracticeModeNarrative(
@@ -355,13 +621,18 @@ function generatePostInteractionSummary(simulation) {
       human_total_offers: practiceResult.human_total_offers,
       pivotal_decision_points: practiceResult.pivotal_decision_points,
     };
+    resolutionQuality = practiceResult.resolution_quality;
+    outcomeAnalysis = practiceResult.outcome_analysis;
   } else {
-    executiveNarrative = generateSimulationModeNarrative(
+    const simResult = generateSimulationModeNarrative(
       simulation,
       openingBids,
       concessionMilestones,
       compromiseProposals
     );
+    executiveNarrative = simResult.narrative;
+    strategicAgentCritique = simResult.strategic_agent_critique;
+    outcomeAnalysis = simResult.outcome_analysis;
   }
 
   const summary = {
@@ -389,6 +660,9 @@ function generatePostInteractionSummary(simulation) {
     compromise_proposals: compromiseProposals,
     executive_narrative: executiveNarrative,
     practice_insights: practiceInsights,
+    resolution_quality: resolutionQuality,
+    strategic_agent_critique: strategicAgentCritique,
+    outcome_analysis: outcomeAnalysis,
     generated_at: new Date().toISOString(),
   };
 

@@ -1834,6 +1834,53 @@ export function generateClientFallbackSummary(simulation) {
       human_total_offers: messages.filter((m) => m.sender_type === 'HUMAN').length,
       pivotal_decision_points: pivotalPoints,
     };
+
+    // Client-side Resolution Quality Score (30% Goal, 25% Status, 25% Effectiveness, 20% Concession)
+    const target = Number(humanAgent.target_value);
+    const reservation = Number(humanAgent.reservation_value);
+    const finalVal = Number(agreement?.final_value || 0);
+    const isLower = /buyer|recruiter|hiring/i.test(`${humanAgent.role} ${humanAgent.name}`);
+
+    let goalScore = 50;
+    if (isAgreement && Number.isFinite(finalVal) && Number.isFinite(target) && Number.isFinite(reservation)) {
+      if (isLower) {
+        if (finalVal <= target) goalScore = 100;
+        else if (finalVal >= reservation) goalScore = 15;
+        else goalScore = Math.max(15, Math.min(100, Math.round(((reservation - finalVal) / (reservation - target)) * 100)));
+      } else {
+        if (finalVal >= target) goalScore = 100;
+        else if (finalVal <= reservation) goalScore = 15;
+        else goalScore = Math.max(15, Math.min(100, Math.round(((finalVal - reservation) / (target - reservation)) * 100)));
+      }
+    } else if (status === 'DEADLOCK') {
+      goalScore = 35;
+    }
+
+    const agreeScore = isAgreement ? 100 : (Number(simulation.current_gap) < 20000 ? 55 : 35);
+    let effScore = rounds >= 2 && rounds <= 6 ? 90 : (rounds === 1 ? 55 : 75);
+    let concScore = humanMilestones.length > 0 ? 85 : (rounds > 2 ? 60 : 75);
+
+    const overallScore = Math.round(goalScore * 0.30 + agreeScore * 0.25 + effScore * 0.25 + concScore * 0.20);
+    var resolutionQuality = {
+      overall_score: overallScore,
+      badge: overallScore >= 85 ? 'Excellent' : overallScore >= 70 ? 'Competent' : 'Developing',
+      factors: {
+        goal_achievement: { score: goalScore, weight: 30, label: 'Goal Achievement' },
+        agreement_status: { score: agreeScore, weight: 25, label: 'Agreement Status' },
+        negotiation_effectiveness: { score: effScore, weight: 25, label: 'Negotiation Effectiveness' },
+        concession_management: { score: concScore, weight: 20, label: 'Concession Management' },
+      },
+      explanation: overallScore >= 80
+        ? 'Strong negotiation performance. Maintained tactical discipline, balanced concessions, and secured a favorable agreement.'
+        : 'Competent negotiation session. Achieved progress with room for tighter opening anchor defense and multi-issue trade-offs.',
+      strengths: [
+        isAgreement ? 'Deal Convergence: Reached mutual agreement within the allowable rounds.' : 'Floor Defense: Prevented agreement on unfavorable terms beyond reservation limit.',
+        'Tactical Exchange: Actively tabled counteroffers to discover opponent flexibility.',
+      ],
+      weaknesses: [
+        rounds === 1 ? 'Premature Settlement: Settling in Round 1 limits discovery of counterpart concession capacity.' : 'Concession Pacing: Refine decrement pacing to preserve additional surplus.',
+      ],
+    };
   } else {
     const a1 = agents[0] || { name: 'Agent 1', role: 'Buyer', personality: 'Collaborative' };
     const a2 = agents[1] || { name: 'Agent 2', role: 'Seller', personality: 'Aggressive' };
@@ -1849,7 +1896,45 @@ export function generateClientFallbackSummary(simulation) {
     } else {
       executiveNarrative += `Negotiation reached a deadlock in Round ${rounds} after exhausting concession limits.`;
     }
+
+    var strategicAgentCritique = {
+      better_agent: `${a1.name} (${a1.role})`,
+      rationale: `${a1.name} (${a1.role}) demonstrated superior negotiation strategy by defending its reservation boundary and yielding fewer unforced concessions, forcing ${a2.name} to absorb reciprocal movements.`,
+      comparisons: [
+        {
+          dimension: 'Opening Anchor Firmness',
+          analysis: `${openingBids[0]?.agent_name || a1.name} opened at ${fmt(openingBids[0]?.offer_value)}, while ${openingBids[1]?.agent_name || a2.name} opened at ${fmt(openingBids[1]?.offer_value)}. Both anchors created a structured ZOPA boundary.`,
+        },
+        {
+          dimension: 'Concession Discipline & Pacing',
+          analysis: `${a1.name} maintained gradual decrement adjustments, avoiding sudden price drops while steering toward agreement.`,
+        },
+        {
+          dimension: 'Tactical Stance Adaptation',
+          analysis: `${a1.personality} profile adopted an adaptive posture, while ${a2.personality} defended target pricing across active rounds.`,
+        },
+      ],
+    };
   }
+
+  // Outcome Analysis for Both Modes
+  const buyerAgent = agents.find((a) => /buyer|procurement|purchasing|recruiter|hiring|engineering/i.test(`${a.role} ${a.name}`)) || agents[0] || {};
+  const sellerAgent = agents.find((a) => a !== buyerAgent) || agents[1] || {};
+  const finalPrice = isAgreement ? Number(agreement?.final_value || 0) : null;
+
+  const outcomeAnalysis = {
+    outcome_type: isAgreement ? 'Successful Agreement' : status === 'DEADLOCK' ? 'Impasse' : 'Failed Negotiation',
+    final_price: finalPrice,
+    buyer_target: Number(buyerAgent.target_value) || null,
+    buyer_reservation: Number(buyerAgent.reservation_value) || null,
+    seller_target: Number(sellerAgent.target_value) || null,
+    seller_reservation: Number(sellerAgent.reservation_value) || null,
+    human_achieved_goal: isAgreement && isPracticeMode,
+    ai_achieved_goal: isAgreement,
+    reason: isAgreement
+      ? `Mutual agreement achieved in Round ${rounds} within the overlapping Zone of Possible Agreement (ZOPA).`
+      : 'Session concluded in an impasse due to non-overlapping reservation boundaries.',
+  };
 
   return {
     simulation_id: simulation.id,
@@ -1867,6 +1952,9 @@ export function generateClientFallbackSummary(simulation) {
     compromise_proposals: compromiseProposals,
     executive_narrative: executiveNarrative,
     practice_insights: practiceInsights,
+    resolution_quality: typeof resolutionQuality !== 'undefined' ? resolutionQuality : null,
+    strategic_agent_critique: typeof strategicAgentCritique !== 'undefined' ? strategicAgentCritique : null,
+    outcome_analysis: outcomeAnalysis,
     is_client_fallback: true,
     generated_at: new Date().toISOString(),
   };
