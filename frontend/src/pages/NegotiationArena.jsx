@@ -44,7 +44,6 @@ import SentimentJourneyTimeline from '../components/SentimentJourneyTimeline';
 import {
   startSimulation,
   getSimulationState,
-  getTacticalRecommendations,
   stepSimulation,
   sendDeadlockAction,
   pauseSimulation,
@@ -318,12 +317,139 @@ const NegotiationArena = () => {
   const [aiCoachEnabled, setAiCoachEnabled] = useState(true);
   const [metricsExpanded, setMetricsExpanded] = useState(false);
   const [practiceMessage, setPracticeMessage] = useState('');
+  const [practiceOfferValue, setPracticeOfferValue] = useState('');
   const [showPracticeReportModal, setShowPracticeReportModal] = useState(false);
-  const [coachingData, setCoachingData] = useState(null);
-  const [coachingLoading, setCoachingLoading] = useState(false);
-  const [coachingError, setCoachingError] = useState('');
-  // VOICE DICTATION FEATURE: browser-native speech-to-text state.
-  const [isListening, setIsListening] = useState(false);
+
+  // Universal Deadlock Resolution System state
+  const [isDeadlockCounterOpen, setIsDeadlockCounterOpen] = useState(false);
+  const [deadlockCounterPrice, setDeadlockCounterPrice] = useState('');
+  const [deadlockPaymentTerms, setDeadlockPaymentTerms] = useState('Net-45');
+  const [deadlockWorkArrangement, setDeadlockWorkArrangement] = useState('Hybrid (2 days remote)');
+  const [deadlockBudgetEng, setDeadlockBudgetEng] = useState(410000);
+  const [deadlockBudgetMkt, setDeadlockBudgetMkt] = useState(325000);
+  const [deadlockBudgetProd, setDeadlockBudgetProd] = useState(265000);
+  const [deadlockSubmitting, setDeadlockSubmitting] = useState(false);
+
+  useEffect(() => {
+    const propVal = simulation?.deadlock_resolution?.latest_proposal?.offer_value;
+    if (propVal && !deadlockCounterPrice) {
+      setDeadlockCounterPrice(propVal);
+    }
+  }, [simulation?.deadlock_resolution?.latest_proposal?.offer_value]);
+
+  const handleDeadlockAccept = async () => {
+    if (!simulation?.id || deadlockSubmitting) return;
+    setDeadlockSubmitting(true);
+    try {
+      const updated = await sendDeadlockAction(simulation.id, {
+        action: 'ACCEPT',
+        sender_role: humanAgent?.role || 'Human Participant',
+        message: 'I accept the compromise offer proposed by the Orchestrator.',
+      });
+      if (updated) {
+        setSimulation(updated);
+        setIsDeadlockCounterOpen(false);
+      }
+    } catch (err) {
+      console.error('Deadlock accept error:', err);
+    } finally {
+      setDeadlockSubmitting(false);
+    }
+  };
+
+  const handleDeadlockReject = async () => {
+    if (!simulation?.id || deadlockSubmitting) return;
+    setDeadlockSubmitting(true);
+    try {
+      const attempts = simulation.deadlock_resolution?.counter_offer_attempts || 0;
+      const confirmDeadlock = attempts >= 2;
+      const updated = await sendDeadlockAction(simulation.id, {
+        action: 'REJECT',
+        sender_role: humanAgent?.role || 'Human Participant',
+        message: 'I reject the compromise proposal.',
+        confirmDeadlock,
+      });
+      if (updated) {
+        setSimulation(updated);
+      }
+    } catch (err) {
+      console.error('Deadlock reject error:', err);
+    } finally {
+      setDeadlockSubmitting(false);
+    }
+  };
+
+  const handleDeadlockCounter = async () => {
+    if (!simulation?.id || deadlockSubmitting) return;
+    const attempts = simulation.deadlock_resolution?.counter_offer_attempts || 0;
+    if (attempts >= 2) return;
+
+    setDeadlockSubmitting(true);
+    try {
+      let offerVal = null;
+      let terms = {};
+      let msg = '';
+
+      if (currentScenarioId === 'project-budget') {
+        const eng = Number(deadlockBudgetEng || 0);
+        const mkt = Number(deadlockBudgetMkt || 0);
+        const prod = Number(deadlockBudgetProd || 0);
+        const total = eng + mkt + prod;
+        if (total !== 1000000) {
+          alert(`Total budget must sum strictly to ₹10,00,000 (Current total: ₹${total.toLocaleString()}).`);
+          setDeadlockSubmitting(false);
+          return;
+        }
+        offerVal = total;
+        terms = {
+          engineering: eng,
+          marketing: mkt,
+          product: prod,
+          engineeringFunding: eng,
+          marketingFunding: mkt,
+          productAIFunding: prod,
+          total,
+        };
+        msg = `Deadlock counter-offer (Attempt ${attempts + 1} of 2): Proposing Engineering ₹${eng.toLocaleString()}, Marketing ₹${mkt.toLocaleString()}, Product AI ₹${prod.toLocaleString()} totaling ₹10,00,000.`;
+      } else if (currentScenarioId === 'job-offer') {
+        const sal = Number(deadlockCounterPrice || 165000);
+        offerVal = sal;
+        terms = {
+          salary: sal,
+          baseSalary: sal,
+          work_arrangement: deadlockWorkArrangement || 'Hybrid (2 days remote)',
+        };
+        msg = `Deadlock counter-offer (Attempt ${attempts + 1} of 2): Proposing ₹${sal.toLocaleString()} base salary with ${deadlockWorkArrangement || 'Hybrid remote flexibility'}.`;
+      } else {
+        const pr = Number(deadlockCounterPrice || 102500);
+        offerVal = pr;
+        terms = {
+          unitPrice: pr,
+          contract_value: pr,
+          payment_terms: deadlockPaymentTerms || 'Net-45',
+        };
+        msg = `Deadlock counter-offer (Attempt ${attempts + 1} of 2): Proposing ₹${pr.toLocaleString()} contract value under ${deadlockPaymentTerms || 'Net-45'} payment terms.`;
+      }
+
+      const updated = await sendDeadlockAction(simulation.id, {
+        action: 'COUNTER_OFFER',
+        sender_role: humanAgent?.role || 'Human Participant',
+        offer_value: offerVal,
+        terms,
+        message: msg,
+      });
+
+      if (updated) {
+        setSimulation(updated);
+        setIsDeadlockCounterOpen(false);
+      }
+    } catch (err) {
+      console.error('Deadlock counter error:', err);
+    } finally {
+      setDeadlockSubmitting(false);
+    }
+  };
+
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
 
   // VOICE DICTATION FEATURE: powered by useSpeechToText hook
@@ -540,141 +666,6 @@ const NegotiationArena = () => {
     }
   };
 
-  const handleHumanSubmit = (text) => {
-    handleSendPracticeMessage(text);
-  };
-
-  const speakMessage = (messageId, text) => {
-    if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') {
-      setSpeechStatus('Text-to-speech is not supported in this browser.');
-      return;
-    }
-
-    if (speakingMessageId === messageId) {
-      window.speechSynthesis.cancel();
-      setSpeakingMessageId(null);
-      return;
-    }
-
-    window.speechSynthesis.cancel();
-    const utterance = new window.SpeechSynthesisUtterance(text);
-    utterance.lang = speechLanguage;
-    utterance.rate = 0.95;
-    utterance.onend = () => setSpeakingMessageId(null);
-    utterance.onerror = () => setSpeakingMessageId(null);
-    setSpeakingMessageId(messageId);
-    window.speechSynthesis.speak(utterance);
-  };
-
-  // VOICE DICTATION FEATURE: Web Speech API integration.
-  // recognition.start() uses the browser's standard microphone permission prompt.
-  const startVoiceDictation = () => {
-    if (!isHumanTurn || turnRunning || isTerminated || isPaused) return;
-
-    const SpeechRecognitionAPI =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!SpeechRecognitionAPI) {
-      setSpeechStatus(
-        'Voice dictation is not supported in this browser. Please use the latest Google Chrome or Microsoft Edge.'
-      );
-      return;
-    }
-
-    try {
-      const recognition = new SpeechRecognitionAPI();
-      recognition.lang = speechLanguage; // en-IN or en-US
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
-
-      // Preserve any text the participant has already typed.
-      speechBaseTextRef.current = practiceMessage.trim();
-      let recognitionError = false;
-
-      recognition.onstart = () => {
-        setIsListening(true);
-        setSpeechStatus(
-          `Listening in ${speechLanguage === 'en-IN' ? 'English (India)' : 'English (US)'}. Speak now.`
-        );
-      };
-
-      recognition.onresult = (event) => {
-        // Rebuild the current transcript from final AND interim speech results.
-        // Interim words appear live and are replaced by final results as speech settles.
-        const transcriptParts = [];
-        for (let i = 0; i < event.results.length; i += 1) {
-          const spokenText = event.results[i][0]?.transcript?.trim();
-          if (spokenText) transcriptParts.push(spokenText);
-        }
-
-        const dictatedText = transcriptParts.join(' ').replace(/\s+/g, ' ').trim();
-        const combinedText = [speechBaseTextRef.current, dictatedText]
-          .filter(Boolean)
-          .join(' ')
-          .slice(0, 1000);
-
-        // This updates the same controlled textarea used by typed messages.
-        // It does NOT submit the message; the participant can review/edit first.
-        setPracticeMessage(combinedText);
-      };
-
-      recognition.onerror = (event) => {
-        recognitionError = true;
-        const errorMessages = {
-          'not-allowed': 'Microphone permission was denied. Allow microphone access for this site in your browser settings.',
-          'service-not-allowed': 'The browser speech-recognition service is unavailable or blocked.',
-          'audio-capture': 'No microphone was found. Connect or enable a microphone and try again.',
-          'no-speech': 'No speech was detected. Click the microphone and try speaking again.',
-          network: 'Speech recognition could not reach the browser speech service. Check your internet connection.',
-          aborted: 'Voice dictation was stopped.',
-        };
-        setSpeechStatus(
-          errorMessages[event.error] ||
-            `Voice dictation error (${event.error}). Please try again.`
-        );
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-        if (recognitionRef.current === recognition) {
-          recognitionRef.current = null;
-        }
-        if (!recognitionError) {
-          setSpeechStatus(
-            'Dictation stopped. Review, edit, or add to the text before clicking Send.'
-          );
-        }
-      };
-
-      recognitionRef.current = recognition;
-      setSpeechStatus('Requesting microphone permission...');
-      // The browser displays its normal microphone permission prompt when needed.
-      recognition.start();
-    } catch (error) {
-      console.error('Unable to start voice dictation:', error);
-      setIsListening(false);
-      setSpeechStatus(
-        'Could not start voice dictation. Check microphone permission and try again.'
-      );
-    }
-  };
-
-  const stopVoiceDictation = () => {
-    const recognition = recognitionRef.current;
-    if (recognition) {
-      try {
-        recognition.stop();
-      } catch (error) {
-        console.warn('Could not stop speech recognition cleanly:', error);
-      }
-    }
-    setIsListening(false);
-    setSpeechStatus(
-      'Dictation stopped. Review, edit, or add to the text before clicking Send.'
-    );
-  };
   /**
    * Directly triggers human decision submissions (Acceptance / Rejection quick options)
    */
@@ -905,29 +896,7 @@ const NegotiationArena = () => {
     if ((!isHumanTurn || turnRunning || isTerminated || isPaused) && isListening) {
       stopVoiceDictation();
     }
-  }, [isHumanTurn, turnRunning, isTerminated, isPaused]);
-
-  // Always release the browser speech-recognition session when leaving the page.
-  useEffect(() => {
-    return () => {
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-      const recognition = recognitionRef.current;
-      if (recognition) {
-        recognition.onstart = null;
-        recognition.onresult = null;
-        recognition.onerror = null;
-        recognition.onend = null;
-        try {
-          recognition.abort();
-        } catch (error) {
-          console.warn('Speech-recognition cleanup failed:', error);
-        }
-        recognitionRef.current = null;
-      }
-    };
-  }, []);
+  }, [isHumanTurn, turnRunning, isTerminated, isPaused, isListening, stopVoiceDictation]);
 
   const [showExitWarning, setShowExitWarning] = useState(false);
   const allowExitRef = useRef(false);
@@ -978,34 +947,7 @@ const NegotiationArena = () => {
   };
 
   // Direct navigation to negotiation report (includes ?from=arena so report page has a "Back to Negotiation Arena" button)
-  const handleViewReport = async () => {
-    if (isPracticeMode) {
-      setShowPracticeReportModal(true);
-      setCoachingData(null);
-      setCoachingError('');
-      setCoachingLoading(true);
-
-      try {
-        if (!simulation?.id) {
-          throw new Error('Simulation ID is not available.');
-        }
-
-        const recommendations = await getTacticalRecommendations(simulation.id);
-
-        if (!recommendations) {
-          throw new Error('Could not load coaching recommendations.');
-        }
-
-        setCoachingData(recommendations);
-      } catch (err) {
-        console.error('Failed to load tactical coaching:', err);
-        setCoachingError(err.message || 'Unable to load coaching recommendations.');
-      } finally {
-        setCoachingLoading(false);
-      }
-
-      return;
-    }
+  const handleViewReport = () => {
     allowExitRef.current = true;
     if (simulation?.id) {
       sessionStorage.setItem('viewing_report_sim_id', simulation.id);
@@ -2720,92 +2662,100 @@ const NegotiationArena = () => {
         </div>
       </div>
 
-      {/* Practice Mode Tactical Coaching Report Modal */}
-
-      {/* Practice Mode Tactical Coaching Report Modal */}
+      {/* Practice Mode Executive Negotiation Report Modal */}
       {showPracticeReportModal && (
-        <div
-          className="arena-modal-backdrop"
-          onClick={() => setShowPracticeReportModal(false)}
-        >
-          <div
-            className="arena-modal-card practice-report-dev-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="arena-modal-backdrop" onClick={() => setShowPracticeReportModal(false)}>
+          <div className="arena-modal-card practice-report-dev-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '880px' }}>
             <div className="practice-dev-header">
               <div className="practice-dev-icon-wrap" style={{ background: isDeadlock ? '#fee2e2' : '#dcfce7' }}>
                 {isDeadlock ? <XCircle size={28} style={{ color: '#ef4444' }} /> : <CheckCircle2 size={28} style={{ color: '#16a34a' }} />}
               </div>
-              <span className="practice-dev-badge">Personalized AI Coaching</span>
+              <span className="practice-dev-badge">Practice Mode Telemetry</span>
               <h3 className="practice-dev-title">
-                Practice Negotiation Report
+                {isDeadlock ? 'Negotiation Deadlock Audit' : 'Negotiation Agreement Report'}
               </h3>
+              <span className={`practice-dev-status-pill ${isDeadlock ? 'status-danger' : 'status-success'}`} style={{
+                background: isDeadlock ? '#fee2e2' : '#dcfce7',
+                color: isDeadlock ? '#b91c1c' : '#15803d',
+                fontWeight: 700
+              }}>
+                {isDeadlock ? 'Deadlock Impasse' : 'Agreement Finalized'}
+              </span>
             </div>
 
-            {coachingLoading && (
-              <p className="practice-dev-text">
-                Generating your personalized negotiation feedback...
-              </p>
-            )}
-
-            {coachingError && (
-              <div className="practice-dev-note">
-                <strong>Unable to load coaching:</strong> {coachingError}
+            <div className="practice-report-summary-grid" style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '12px',
+              margin: '18px 0',
+              padding: '14px',
+              background: 'var(--bg-card-subtle, #f8fafc)',
+              borderRadius: '12px',
+              border: '1px solid var(--border-color, #e2e8f0)'
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', textTransform: 'uppercase', fontWeight: 600 }}>Settlement Value</span>
+                <span style={{ fontSize: '1.15rem', fontWeight: 800, color: isDeadlock ? '#b91c1c' : '#15803d' }}>
+                  {simulation?.agreement?.final_value
+                    ? `₹${Number(simulation.agreement.final_value).toLocaleString()}`
+                    : isDeadlock ? 'No Deal' : `Gap: ₹${Number(simulation?.current_gap || 0).toLocaleString()}`}
+                </span>
               </div>
-            )}
+              <div style={{ textAlign: 'center' }}>
+                <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', textTransform: 'uppercase', fontWeight: 600 }}>Rounds Concluded</span>
+                <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
+                  {currentRound} / {maxRounds}
+                </span>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', textTransform: 'uppercase', fontWeight: 600 }}>Offers Exchanged</span>
+                <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#6366f1' }}>
+                  {offersCount}
+                </span>
+              </div>
+            </div>
 
-            {coachingData && (
-              <div className="practice-coaching-content">
-                <p className="practice-dev-text">
-                  Your negotiation coaching assessment is ready.
-                </p>
+            <p className="practice-dev-text" style={{ fontSize: '0.92rem', lineHeight: '1.5', color: '#334155', margin: '0 0 16px 0' }}>
+              {isDeadlock
+                ? `Negotiation reached an impasse in Round ${simulation?.current_round || 1}. Reason: ${simulation?.deadlock_reason || simulation?.deadlock_resolution?.reason || 'Participants were unable to converge within reservation thresholds.'}`
+                : `Successfully concluded mutual terms between ${humanAgent?.name || 'Human Participant'} and ${opponentAgent?.name || 'AI Counterpart'} at ₹${Number(simulation?.agreement?.final_value || 0).toLocaleString()} under scenario guidelines.`}
+            </p>
 
-                {coachingData.participants?.map((participant, index) => (
-                  <div
-                    className="practice-coaching-participant"
-                    key={`${participant.name}-${index}`}
-                  >
-                    <h4>{participant.name}</h4>
-                    <p>
-                      <strong>Role:</strong> {participant.role}
-                      {participant.personality && (
-                        <> | <strong>Personality:</strong> {participant.personality}</>
-                      )}
-                    </p>
-
-                    <h5>Strengths</h5>
-                    <ul>
-                      {participant.strengths?.map((item, i) => (
-                        <li key={`strength-${i}`}>{item}</li>
-                      ))}
-                    </ul>
-
-                    <h5>Areas for Improvement</h5>
-                    <ul>
-                      {participant.areas_for_improvement?.map((item, i) => (
-                        <li key={`improvement-${i}`}>{item}</li>
-                      ))}
-                    </ul>
-
-                    <h5>Actionable Takeaways</h5>
-                    <ul>
-                      {participant.actionable_takeaways?.map((item, i) => (
-                        <li key={`takeaway-${i}`}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-
-                {coachingData.deadlock_recovery && (
-                  <div className="practice-dev-note">
-                    <strong>Deadlock Recovery:</strong>{' '}
-                    {typeof coachingData.deadlock_recovery === 'string'
-                      ? coachingData.deadlock_recovery
-                      : 'Your negotiation demonstrated movement toward resolving a deadlock.'}
+            {/* Universal Deadlock Resolution Audit Section */}
+            {simulation?.deadlock_resolution && (
+              <div style={{
+                background: '#fffbeb',
+                border: '1px solid #fcd34d',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                marginBottom: '16px',
+                fontSize: '0.82rem',
+                color: '#78350f'
+              }}>
+                <div style={{ fontWeight: 800, color: '#92400e', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Scale size={15} />
+                  <span>Deadlock Resolution Audit</span>
+                </div>
+                <div style={{ marginBottom: '4px' }}>
+                  <strong>Deadlock Reason:</strong> {simulation.deadlock_resolution.reason || simulation.deadlock_reason}
+                </div>
+                {simulation.deadlock_resolution.initial_compromise?.summary && (
+                  <div style={{ marginBottom: '4px' }}>
+                    <strong>Orchestrator Compromise:</strong> {simulation.deadlock_resolution.initial_compromise.summary}
                   </div>
                 )}
+                <div style={{ marginBottom: '4px' }}>
+                  <strong>Counter-Offer Attempts:</strong> {simulation.deadlock_resolution.counter_offer_attempts || 0} / 2 attempts used
+                </div>
+                <div>
+                  <strong>Resolution Outcome:</strong> <span style={{ fontWeight: 700, color: simulation.deadlock_resolution.final_outcome === 'AGREEMENT_REACHED' ? '#15803d' : '#b91c1c' }}>{simulation.deadlock_resolution.final_outcome || (isCompleted ? 'AGREEMENT_REACHED' : 'DEADLOCK')}</span>
+                </div>
               </div>
             )}
+
+            <div className="practice-dev-note" style={{ background: '#f1f5f9', padding: '12px 14px', borderRadius: '10px', fontSize: '0.82rem', color: '#475569', marginBottom: '20px' }}>
+              <span>🎯 <strong>Tactical Feedback:</strong> {isDeadlock ? 'AI counterpart held a firm stance. Consider proposing concessions earlier or testing a collaborative opening move.' : 'Great job closing the gap! Your concessions effectively matched the counterpart archetype.'}</span>
+            </div>
 
             {/* Sentiment Journey Timeline & Emotional Trajectory Visualizer (Member 2 Feature) */}
             {simulation?.messages && simulation.messages.length > 0 && (
@@ -2849,7 +2799,6 @@ const NegotiationArena = () => {
               >
                 Back to Practice Scenarios
               </button>
-
               <button
                 type="button"
                 className="btn-practice-dev-restart"
@@ -2860,7 +2809,6 @@ const NegotiationArena = () => {
               >
                 Restart Session
               </button>
-
               <button
                 type="button"
                 className="btn-practice-dev-close"
@@ -2872,8 +2820,6 @@ const NegotiationArena = () => {
           </div>
         </div>
       )}
-
-
     </div>
   );
 };

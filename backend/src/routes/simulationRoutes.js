@@ -16,17 +16,18 @@ const {
   handleDeadlockResolutionAction,
 } = require('../controllers/simulationController');
 
-// Routes
-router.post('/start', startSimulation);
-router.get('/', listSimulations);
-router.get('/:id/recommendations', getSimulationRecommendations);
-router.get('/:id', getSimulationState);
-router.get('/:id/export', exportSimulation);
-router.post('/:id/step', advanceSimulationStep);
-router.post('/:id/run', runFullSimulation);
-router.post('/:id/pause', pauseSimulation);
-router.post('/:id/resume', resumeSimulation);
-router.post('/:id/end', endSimulation);
-router.post('/:id/restart', restartSimulation);
+// All simulation routes support optional Firebase ID token (populates req.user when logged in, allows guest testing)
+router.post('/start', optionalFirebaseToken, startSimulation);
+router.get('/', optionalFirebaseToken, listSimulations);
+router.get('/:id/recommendations', optionalFirebaseToken, getSimulationRecommendations);
+router.get('/:id', optionalFirebaseToken, getSimulationState);
+router.get('/:id/export', optionalFirebaseToken, exportSimulation);
+router.post('/:id/step', optionalFirebaseToken, advanceSimulationStep);
+router.post('/:id/deadlock/action', optionalFirebaseToken, handleDeadlockResolutionAction);
+router.post('/:id/run', optionalFirebaseToken, runFullSimulation);
+router.post('/:id/pause', optionalFirebaseToken, pauseSimulation);
+router.post('/:id/resume', optionalFirebaseToken, resumeSimulation);
+router.post('/:id/end', optionalFirebaseToken, endSimulation);
+router.post('/:id/restart', optionalFirebaseToken, restartSimulation);
 
 module.exports = router;

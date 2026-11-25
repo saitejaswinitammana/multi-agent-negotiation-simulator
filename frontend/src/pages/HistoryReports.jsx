@@ -36,6 +36,7 @@ import {
   getSimulationState,
   getTacticalRecommendations,
 } from '../services/simulationApi';
+import SentimentJourneyTimeline from '../components/SentimentJourneyTimeline';
 import './HistoryReports.css';
 
 // Official supported scenarios
